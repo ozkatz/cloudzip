@@ -3,15 +3,17 @@ package download
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"io"
+	"log/slog"
+	"net/url"
+	"sync"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"io"
-	"log/slog"
-	"net/url"
-	"sync"
 )
 
 type s3ParsedUri struct {
@@ -62,18 +64,24 @@ func (d *S3Downloader) getServiceForBucket(ctx context.Context, bucket string) (
 	return svc, nil
 }
 
+func s3IsNotFoundErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if awsErr, ok := err.(awserr.Error); ok {
+		switch awsErr.Code() {
+		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
+			return true
+		}
+	}
+	return false
+}
+
 func (d *S3Downloader) parseUri(uri string) (*s3ParsedUri, error) {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return nil, err
 	}
-	switch parsed.Scheme {
-	case "s3", "s3a", "S3":
-		break
-	default:
-		return nil, fmt.Errorf("%w: invalid S3 URI - %s", ErrInvalidURI, uri)
-	}
-
 	return &s3ParsedUri{
 		Bucket: parsed.Host,
 		Path:   parsed.Path,
@@ -98,7 +106,9 @@ func (d *S3Downloader) Download(ctx context.Context, uri string, offsetStart int
 		Key:    aws.String(parsed.Path),
 		Range:  rng,
 	})
-	if err != nil {
+	if s3IsNotFoundErr(err) {
+		return nil, ErrDoesNotExist
+	} else if err != nil {
 		return nil, err
 	}
 	return out.Body, nil
@@ -118,7 +128,9 @@ func (d *S3Downloader) SizeOf(ctx context.Context, uri string) (int64, error) {
 		Bucket: aws.String(parsed.Bucket),
 		Key:    aws.String(parsed.Path),
 	})
-	if err != nil {
+	if s3IsNotFoundErr(err) {
+		return 0, ErrDoesNotExist
+	} else if err != nil {
 		return 0, err
 	}
 	sizeBytes := aws.Int64Value(out.ContentLength)

@@ -15,11 +15,14 @@ type DynamicDownloader struct {
 
 func NewDynamicDownloader() *DynamicDownloader {
 	s3Downloader := NewS3Downloader()
+	localDownloader := NewLocalDownloader()
 	return &DynamicDownloader{
 		registeredDownloaders: map[string]Downloader{
-			"s3":  s3Downloader,
-			"s3a": s3Downloader,
-			"S3":  s3Downloader,
+			"s3":    s3Downloader,
+			"s3a":   s3Downloader,
+			"S3":    s3Downloader,
+			"local": localDownloader,
+			"file":  localDownloader,
 		},
 	}
 }
