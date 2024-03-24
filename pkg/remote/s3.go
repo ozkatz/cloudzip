@@ -2,18 +2,20 @@ package remote
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws/awserr"
+	"strings"
+
 	"io"
 	"log/slog"
 	"net/url"
 	"sync"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type s3ParsedUri struct {
@@ -25,13 +27,13 @@ var _ Downloader = &S3Downloader{}
 
 type S3Downloader struct {
 	lock         *sync.Mutex
-	serviceCache map[string]s3iface.S3API
+	serviceCache map[string]*s3.Client
 }
 
 func NewS3Downloader() *S3Downloader {
 	return &S3Downloader{
 		lock:         &sync.Mutex{},
-		serviceCache: make(map[string]s3iface.S3API),
+		serviceCache: make(map[string]*s3.Client),
 	}
 }
 
@@ -46,20 +48,32 @@ func buildRange(offsetStart int64, offsetEnd int64) *string {
 	return nil
 }
 
-func (d *S3Downloader) getServiceForBucket(ctx context.Context, bucket string) (s3iface.S3API, error) {
+func (d *S3Downloader) getServiceForBucket(ctx context.Context, bucket string) (*s3.Client, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	if svc, ok := d.serviceCache[bucket]; ok {
 		return svc, nil
 	}
 	const defaultRegion = "us-east-1"
-	sess := session.Must(session.NewSession())
-	svc := s3.New(sess, aws.NewConfig().WithRegion(defaultRegion))
-	region, err := s3manager.GetBucketRegionWithClient(ctx, svc, bucket)
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(defaultRegion))
 	if err != nil {
 		return nil, err
 	}
-	svc = s3.New(sess, aws.NewConfig().WithRegion(region))
+	svc := s3.NewFromConfig(cfg)
+	region, err := manager.GetBucketRegion(ctx, svc, bucket)
+	if err != nil {
+		if s3IsNotFoundErr(err) {
+			return nil, ErrDoesNotExist
+		}
+		return nil, err
+	}
+	if region != defaultRegion {
+		cfg, err = config.LoadDefaultConfig(ctx, config.WithRegion(region))
+		if err != nil {
+			return nil, err
+		}
+		svc = s3.NewFromConfig(cfg)
+	}
 	d.serviceCache[bucket] = svc
 	return svc, nil
 }
@@ -68,13 +82,8 @@ func s3IsNotFoundErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	if awsErr, ok := err.(awserr.Error); ok {
-		switch awsErr.Code() {
-		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey:
-			return true
-		}
-	}
-	return false
+	var nf *types.NotFound
+	return errors.As(err, &nf)
 }
 
 func (d *S3Downloader) parseUri(uri string) (*s3ParsedUri, error) {
@@ -82,9 +91,13 @@ func (d *S3Downloader) parseUri(uri string) (*s3ParsedUri, error) {
 	if err != nil {
 		return nil, err
 	}
+	path := parsed.Path
+	if strings.HasPrefix(path, "/") {
+		path = path[1:]
+	}
 	return &s3ParsedUri{
 		Bucket: parsed.Host,
-		Path:   parsed.Path,
+		Path:   path,
 	}, nil
 }
 
@@ -101,7 +114,7 @@ func (d *S3Downloader) Download(ctx context.Context, uri string, offsetStart int
 	rng := buildRange(offsetStart, offsetEnd)
 
 	slog.Debug("s3:GetObject", "uri", uri, "range", rng)
-	out, err := svc.GetObjectWithContext(ctx, &s3.GetObjectInput{
+	out, err := svc.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(parsed.Bucket),
 		Key:    aws.String(parsed.Path),
 		Range:  rng,
@@ -115,7 +128,6 @@ func (d *S3Downloader) Download(ctx context.Context, uri string, offsetStart int
 }
 
 func (d *S3Downloader) SizeOf(ctx context.Context, uri string) (int64, error) {
-	slog.Debug("s3:HeadObject", "uri", uri)
 	parsed, err := d.parseUri(uri)
 	if err != nil {
 		return 0, err
@@ -124,15 +136,16 @@ func (d *S3Downloader) SizeOf(ctx context.Context, uri string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	out, err := svc.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
+	out, err := svc.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(parsed.Bucket),
 		Key:    aws.String(parsed.Path),
 	})
+	slog.Debug("s3:HeadObject", "uri", uri, "bucket", parsed.Bucket, "key", parsed.Path, "error", err)
 	if s3IsNotFoundErr(err) {
 		return 0, ErrDoesNotExist
 	} else if err != nil {
 		return 0, err
 	}
-	sizeBytes := aws.Int64Value(out.ContentLength)
+	sizeBytes := aws.ToInt64(out.ContentLength)
 	return sizeBytes, nil
 }
