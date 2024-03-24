@@ -3,8 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/ozkatz/cloudzip/pkg/download"
+	"github.com/ozkatz/cloudzip/pkg/remote"
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
+	"io"
 
 	"log/slog"
 	"os"
@@ -39,15 +40,21 @@ func ls(args []string) {
 		help()
 	}
 	uri := args[0]
-	downloader := download.NewDynamicDownloader()
-	reader := zipfile.NewRemoteZipReader(downloader, uri)
-	files, err := reader.ListFiles(context.Background())
+	ctx := context.Background()
+	obj := remote.NewRemoteObject(uri, ctx)
+	zip, err := zipfile.NewCentralDirectoryParser(obj)
 	if err != nil {
+		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open zip file: %v\n", err))
+		os.Exit(1)
+	}
+	files, err := zip.GetCentralDirectory()
+	if err != nil {
+		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read zip file contents: %v\n", err))
 		os.Exit(1)
 	}
 	for _, f := range files {
 		fmt.Printf("%s\t%-12d\t%s\t%s\n",
-			f.Mode(), f.UncompressedSize64, f.Modified.Format(time.RFC822Z), f.Name)
+			f.Mode, f.UncompressedSizeBytes, f.Modified.Format(time.RFC822Z), f.FileName)
 	}
 }
 
@@ -57,11 +64,21 @@ func cat(args []string) {
 	}
 	uri := args[0]
 	filePath := args[1]
-	downloader := download.NewDynamicDownloader()
 	ctx := context.Background()
-	reader := zipfile.NewRemoteZipReader(downloader, uri)
-	_, err := reader.CopyFile(ctx, filePath, os.Stdout)
+	obj := remote.NewRemoteObject(uri, ctx)
+	zip, err := zipfile.NewCentralDirectoryParser(obj)
 	if err != nil {
+		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open zip file: %v\n", err))
+		os.Exit(1)
+	}
+	reader, err := zip.Read(filePath)
+	if err != nil {
+		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open zip file stream: %v\n", err))
+		os.Exit(1)
+	}
+	_, err = io.Copy(os.Stdout, reader)
+	if err != nil {
+		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not download file: %v\n", err))
 		os.Exit(1)
 	}
 }
