@@ -25,15 +25,20 @@ type s3ParsedUri struct {
 
 var _ Downloader = &S3Downloader{}
 
+type S3Client interface {
+	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+}
+
 type S3Downloader struct {
 	lock         *sync.Mutex
-	serviceCache map[string]*s3.Client
+	serviceCache map[string]S3Client
 }
 
 func NewS3Downloader() *S3Downloader {
 	return &S3Downloader{
 		lock:         &sync.Mutex{},
-		serviceCache: make(map[string]*s3.Client),
+		serviceCache: make(map[string]S3Client),
 	}
 }
 
@@ -48,7 +53,7 @@ func buildRange(offsetStart int64, offsetEnd int64) *string {
 	return nil
 }
 
-func (d *S3Downloader) getServiceForBucket(ctx context.Context, bucket string) (*s3.Client, error) {
+func (d *S3Downloader) getServiceForBucket(ctx context.Context, bucket string) (S3Client, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	if svc, ok := d.serviceCache[bucket]; ok {
@@ -119,6 +124,7 @@ func (d *S3Downloader) Download(ctx context.Context, uri string, offsetStart int
 		Key:    aws.String(parsed.Path),
 		Range:  rng,
 	})
+
 	if s3IsNotFoundErr(err) {
 		return nil, ErrDoesNotExist
 	} else if err != nil {
