@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -106,16 +108,21 @@ func buildRange(offsetStart *int64, offsetEnd *int64) *string {
 }
 
 func (s *S3ObjectFetcher) Fetch(ctx context.Context, startOffset *int64, endOffset *int64) (io.ReadCloser, error) {
+	start := time.Now()
 	rng := buildRange(startOffset, endOffset)
 	response, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(s.path),
 		Range:  rng,
 	})
+	tookMs := time.Since(start).Milliseconds()
 	if s3IsNotFoundErr(err) {
+		slog.Warn("s3.GetObject", "range", rng, "bucket", s.bucket, "key", s.path, "took_ms", tookMs, "error", "NotFound")
 		return nil, ErrDoesNotExist
 	} else if err != nil {
+		slog.Error("s3.GetObject", "range", rng, "bucket", s.bucket, "key", s.path, "took_ms", tookMs, "error", err)
 		return nil, err
 	}
+	slog.Debug("s3.GetObject", "range", rng, "bucket", s.bucket, "key", s.path, "took_ms", tookMs, "error", nil)
 	return response.Body, nil
 }
