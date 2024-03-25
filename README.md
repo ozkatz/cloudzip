@@ -67,13 +67,26 @@ Zip files don't have to be compressed! `zip -0` will result in an uncompressed a
 
 ## How Does it Work?
 
-`cz ls` performs 2 [HTTP range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests):
+#### `cz ls` 
 
-1. Fetch the last 64kB of the zip file, looking for the End Of Central Directory ([EOCD](https://en.wikipedia.org/wiki/ZIP_(file_format)#End_of_central_directory_record_(EOCD))) Marker  (and/or [EOCD64](https://en.wikipedia.org/wiki/ZIP_(file_format)#ZIP64)). 
-1. The marker contains the exact start offset and size of the [Central Directory](https://en.wikipedia.org/wiki/ZIP_(file_format)#Central_directory_file_header), which is then read by issuing another HTTP range request
+Listing is done by issuing 2 [HTTP range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests):
+
+1. Fetch the last 64kB of the zip file, looking for the End Of Central Directory ([EOCD](https://en.wikipedia.org/wiki/ZIP_(file_format)#End_of_central_directory_record_(EOCD))), and possibly [EOCD64](https://en.wikipedia.org/wiki/ZIP_(file_format)#ZIP64). 
+2. The EOCD contains the exact start offset and size of the [Central Directory](https://en.wikipedia.org/wiki/ZIP_(file_format)#Central_directory_file_header), which is then read by issuing another HTTP range request
 
 Once the central directory is read, it is parsed and written to `stdout`, similar to the output of `unzip -l`.
 
-`cz cat` does the same thing - read the central directory, looking for the file we wish to download. Once found, we read the byte offset and size of the file, issuing a third HTTP range request, fetching the file itself.
+#### `cz cat` 
+
+Reading a file from the remote zip involves another HTTP range request: once we have the central directory, we find the relevant entry for the file we wish to get, and figure out its offset and size. This is then used to issue a 3rd HTTP range request.
 
 Because zip files store each file (whether compressed or not) independently, this is enough to uncompress and write the file to `stdout`.
+
+## Logging
+
+Set the `$CLOUDZIP_LOGGING` environment variable to `DEBUG` to log storage calls to stderr: 
+
+```shell
+export CLOUDZIP_LOGGING="DEBUG"
+cz ls s3://example-bucket/path/to/archive.zip  # will log S3 calls to stderr
+```
