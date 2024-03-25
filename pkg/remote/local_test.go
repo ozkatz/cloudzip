@@ -9,47 +9,23 @@ import (
 	"testing"
 )
 
-func TestLocalDownloader_SizeOf(t *testing.T) {
-	ctx := context.Background()
-	l := remote.NewLocalDownloader()
-	t.Run("non empty file", func(t *testing.T) {
-		size, err := l.SizeOf(ctx, "file://testdata/lorem.txt")
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-			return
-		}
-		if size != 446 {
-			t.Errorf("expected size 446, got %d", size)
-		}
-	})
-	t.Run("empty file", func(t *testing.T) {
-		size, err := l.SizeOf(ctx, "file://testdata/empty.txt")
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-			return
-		}
-		if size != 0 {
-			t.Errorf("expected size 0, got %d", size)
-		}
-	})
-	t.Run("non-existent file", func(t *testing.T) {
-		_, err := l.SizeOf(ctx, "file://testdata/no_such_file.txt")
-		if !errors.Is(err, remote.ErrDoesNotExist) {
-			t.Errorf("unexpected error, %v", err)
-		}
-	})
+func int64p(n int64) *int64 {
+	return &n
 }
 
-func TestLocalDownloader_Download(t *testing.T) {
-	ctx := context.Background()
-	l := remote.NewLocalDownloader()
+func TestLocalDownloader_Fetch(t *testing.T) {
 	t.Run("full file", func(t *testing.T) {
-		r, err := l.Download(ctx, "file://testdata/lorem.txt", 0, 445)
+		r, err := remote.NewLocalFetcher("file://testdata/lorem.txt")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 			return
 		}
-		data, err := io.ReadAll(r)
+		reader, err := r.Fetch(context.Background(), nil, nil)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		data, err := io.ReadAll(reader)
 		if err != nil {
 			t.Errorf("could not read file: %v", err)
 			return
@@ -59,12 +35,17 @@ func TestLocalDownloader_Download(t *testing.T) {
 		}
 	})
 	t.Run("file part", func(t *testing.T) {
-		r, err := l.Download(ctx, "file://testdata/lorem.txt", 5, 15)
+		r, err := remote.NewLocalFetcher("file://testdata/lorem.txt")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 			return
 		}
-		data, err := io.ReadAll(r)
+		reader, err := r.Fetch(context.Background(), int64p(5), int64p(15))
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		data, err := io.ReadAll(reader)
 		if err != nil {
 			t.Errorf("could not read file: %v", err)
 			return
@@ -75,12 +56,17 @@ func TestLocalDownloader_Download(t *testing.T) {
 
 	})
 	t.Run("file part (beginning)", func(t *testing.T) {
-		r, err := l.Download(ctx, "file://testdata/lorem.txt", 0, 10)
+		r, err := remote.NewLocalFetcher("file://testdata/lorem.txt")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 			return
 		}
-		data, err := io.ReadAll(r)
+		reader, err := r.Fetch(context.Background(), int64p(0), int64p(10))
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		data, err := io.ReadAll(reader)
 		if err != nil {
 			t.Errorf("could not read file: %v", err)
 			return
@@ -89,8 +75,28 @@ func TestLocalDownloader_Download(t *testing.T) {
 			t.Errorf("wrong body returned: %s\n", data)
 		}
 	})
+	t.Run("file part (end)", func(t *testing.T) {
+		r, err := remote.NewLocalFetcher("file://testdata/lorem.txt")
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		reader, err := r.Fetch(context.Background(), nil, int64p(5))
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		data, err := io.ReadAll(reader)
+		if err != nil {
+			t.Errorf("could not read file: %v", err)
+			return
+		}
+		if !bytes.Equal(data, []byte("rum.\n")) {
+			t.Errorf("wrong body returned: %s\n", data)
+		}
+	})
 	t.Run("non-existent file", func(t *testing.T) {
-		_, err := l.Download(ctx, "file://testdata/no_such_file.txt", 0, 100)
+		_, err := remote.NewLocalFetcher("file://testdata/lorem_does_not_exist.txt")
 		if !errors.Is(err, remote.ErrDoesNotExist) {
 			t.Errorf("unexpected error, %v", err)
 		}

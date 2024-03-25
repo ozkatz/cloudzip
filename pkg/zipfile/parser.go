@@ -109,37 +109,26 @@ type CDLocation struct {
 	Zip64     bool
 }
 
-type OffsetReader interface {
-	ReaderAt(start, end int64) (io.Reader, error)
-	Size() (int64, error)
+type OffsetFetcher interface {
+	Fetch(start, end *int64) (io.Reader, error)
 }
 
 type CentralDirectoryParser struct {
-	sizeBytes int64
-	reader    OffsetReader
+	reader OffsetFetcher
 }
 
-func NewCentralDirectoryParser(reader OffsetReader) (*CentralDirectoryParser, error) {
-	size, err := reader.Size()
-	if err != nil {
-		return nil, err
-	}
+func NewCentralDirectoryParser(reader OffsetFetcher) *CentralDirectoryParser {
 	return &CentralDirectoryParser{
-		sizeBytes: size,
-		reader:    reader,
-	}, nil
+		reader: reader,
+	}
 }
 
 func (p *CentralDirectoryParser) getEOCDMarkerBuffer() ([]byte, error) {
-	var offset int64
-	if p.sizeBytes > EOCDMarkerPrefetchBufferSize {
-		offset = p.sizeBytes - EOCDMarkerPrefetchBufferSize - 1
-	}
-	r, err := p.reader.ReaderAt(offset, offset+EOCDMarkerPrefetchBufferSize)
+	var bufSize int64 = EOCDMarkerPrefetchBufferSize
+	r, err := p.reader.Fetch(nil, &bufSize)
 	if err != nil {
 		return nil, err
 	}
-
 	return io.ReadAll(r)
 }
 
@@ -222,8 +211,13 @@ func parseZip64ExtraFields(extraFields []byte) *zip64ExtraFields {
 	return &ef
 }
 
+func offset(n uint64) *int64 {
+	a := int64(n)
+	return &a
+}
+
 func (p *CentralDirectoryParser) parseCDR(loc *CDLocation) ([]*CDR, error) {
-	reader, err := p.reader.ReaderAt(int64(loc.Offset), int64(loc.Offset+loc.SizeBytes))
+	reader, err := p.reader.Fetch(offset(loc.Offset), offset(loc.Offset+loc.SizeBytes))
 	if err != nil {
 		return nil, ErrInvalidZip
 	}
@@ -344,15 +338,12 @@ func (p *CentralDirectoryParser) Read(fileName string) (io.Reader, error) {
 	for _, f := range directory {
 		if f.FileName == fileName {
 			// found record!
-			offset := f.LocalFileHeaderOffset
+			off := f.LocalFileHeaderOffset
 			approxHeaderSize := uint64(p.localHeaderSizeHeuristic(f.FileName))
 			approxTotalSize := f.CompressedSizeBytes + approxHeaderSize
-			if int64(offset+approxTotalSize) > p.sizeBytes {
-				approxTotalSize = uint64(p.sizeBytes) - 1 - offset // read the whole thing?
-			}
 
 			// open a reader at offset
-			dataReader, err := p.reader.ReaderAt(int64(offset), int64(offset+approxTotalSize))
+			dataReader, err := p.reader.Fetch(offset(off), offset(off+approxTotalSize))
 			if err != nil {
 				return nil, err
 			}

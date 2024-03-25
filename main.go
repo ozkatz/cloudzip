@@ -35,18 +35,31 @@ Example:
 
 `
 
+type adapter struct {
+	f   remote.Fetcher
+	ctx context.Context
+}
+
+func (a *adapter) Fetch(start, end *int64) (io.Reader, error) {
+	return a.f.Fetch(a.ctx, start, end)
+}
+
 func ls(args []string) {
 	if len(args) != 1 {
 		help()
 	}
 	uri := args[0]
 	ctx := context.Background()
-	obj := remote.NewRemoteObject(uri, ctx)
-	zip, err := zipfile.NewCentralDirectoryParser(obj)
+	obj, err := remote.Object(uri)
 	if err != nil {
-		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open zip file: %v\n", err))
+		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open remote zip file: %v\n", err))
 		os.Exit(1)
 	}
+	zip := zipfile.NewCentralDirectoryParser(&adapter{
+		f:   obj,
+		ctx: ctx,
+	})
+
 	files, err := zip.GetCentralDirectory()
 	if err != nil {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read zip file contents: %v\n", err))
@@ -65,12 +78,15 @@ func cat(args []string) {
 	uri := args[0]
 	filePath := args[1]
 	ctx := context.Background()
-	obj := remote.NewRemoteObject(uri, ctx)
-	zip, err := zipfile.NewCentralDirectoryParser(obj)
+	obj, err := remote.Object(uri)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open zip file: %v\n", err))
 		os.Exit(1)
 	}
+	zip := zipfile.NewCentralDirectoryParser(&adapter{
+		f:   obj,
+		ctx: ctx,
+	})
 	reader, err := zip.Read(filePath)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open zip file stream: %v\n", err))

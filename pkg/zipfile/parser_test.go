@@ -1,42 +1,42 @@
 package zipfile_test
 
 import (
+	"context"
+	"github.com/ozkatz/cloudzip/pkg/remote"
 	"hash/crc32"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
 )
 
 type adapter struct {
-	f *os.File
+	f   remote.Fetcher
+	ctx context.Context
 }
 
-func (a *adapter) Size() (int64, error) {
-	info, err := a.f.Stat()
-	if err != nil {
-		return 0, err
-	}
-	return info.Size(), nil
+func (a *adapter) Fetch(start, end *int64) (io.Reader, error) {
+	return a.f.Fetch(a.ctx, start, end)
 }
 
-func (a *adapter) ReaderAt(start, end int64) (io.Reader, error) {
-	_, err := a.f.Seek(start, io.SeekStart)
+func parser(uri string) (*zipfile.CentralDirectoryParser, error) {
+	fetcher, err := remote.Object(uri)
 	if err != nil {
 		return nil, err
 	}
-	return io.LimitReader(a.f, end-start), nil
+	return zipfile.NewCentralDirectoryParser(&adapter{
+		ctx: context.Background(),
+		f:   fetcher,
+	}), nil
 }
 
 func TestCentralDirectoryParser_GetCentralDirectory(t *testing.T) {
-	f, err := os.Open("testdata/big_directory.zip")
+	p, err := parser("file://testdata/big_directory.zip")
 	if err != nil {
 		t.Errorf("unexpected error opening zip file: %v", err)
 		return
 	}
 
-	p, err := zipfile.NewCentralDirectoryParser(&adapter{f})
 	files, err := p.GetCentralDirectory()
 	if len(files) != 150000 {
 		t.Errorf("expected 150,000 files, got %d", len(files))
@@ -44,12 +44,7 @@ func TestCentralDirectoryParser_GetCentralDirectory(t *testing.T) {
 }
 
 func TestCentralDirectoryParser_GetCentralDirectory64(t *testing.T) {
-	f, err := os.Open("testdata/huge.zip")
-	if err != nil {
-		t.Errorf("unexpected error opening zip file: %v", err)
-		return
-	}
-	p, err := zipfile.NewCentralDirectoryParser(&adapter{f})
+	p, err := parser("file://testdata/huge.zip")
 	if err != nil {
 		t.Errorf("unexpected error opening zip file: %v", err)
 		return
@@ -62,12 +57,7 @@ func TestCentralDirectoryParser_GetCentralDirectory64(t *testing.T) {
 }
 
 func TestCentralDirectoryParser_Read(t *testing.T) {
-	f, err := os.Open("testdata/regular.zip")
-	if err != nil {
-		t.Errorf("unexpected error opening zip file: %v", err)
-		return
-	}
-	p, err := zipfile.NewCentralDirectoryParser(&adapter{f})
+	p, err := parser("file://testdata/regular.zip")
 	if err != nil {
 		t.Errorf("unexpected error opening zip file: %v", err)
 		return
@@ -93,12 +83,7 @@ func TestCentralDirectoryParser_Read(t *testing.T) {
 }
 
 func TestCentralDirectoryParser_GetCentralDirectory64FromStdlib(t *testing.T) {
-	f, err := os.Open("testdata/zip64.zip")
-	if err != nil {
-		t.Errorf("unexpected error opening zip file: %v", err)
-		return
-	}
-	p, err := zipfile.NewCentralDirectoryParser(&adapter{f})
+	p, err := parser("file://testdata/zip64.zip")
 	if err != nil {
 		t.Errorf("unexpected error opening zip file: %v", err)
 		return
@@ -125,10 +110,10 @@ func TestCentralDirectoryParser_GetCentralDirectory64FromStdlib(t *testing.T) {
 
 func TestNewRemoteZipReader(t *testing.T) {
 	zipFiles := []string{
-		"testdata/regular.zip",
-		"testdata/huge.zip",
-		"testdata/uncompressed.zip",
-		"testdata/zip64.zip",
+		"file://testdata/regular.zip",
+		"file://testdata/huge.zip",
+		"file://testdata/uncompressed.zip",
+		"file://testdata/zip64.zip",
 	}
 
 	for _, zipFile := range zipFiles {
@@ -138,12 +123,7 @@ func TestNewRemoteZipReader(t *testing.T) {
 
 func testZip(t *testing.T, path string) {
 	t.Run(path, func(t *testing.T) {
-		f, err := os.Open(path)
-		if err != nil {
-			t.Errorf("unexpected error opening zip file: %v", err)
-			return
-		}
-		p, err := zipfile.NewCentralDirectoryParser(&adapter{f})
+		p, err := parser(path)
 		if err != nil {
 			t.Errorf("unexpected error opening zip file: %v", err)
 			return
