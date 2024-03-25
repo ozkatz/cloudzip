@@ -67,11 +67,13 @@ Zip files don't have to be compressed! `zip -0` will result in an uncompressed a
 
 ## How Does it Work?
 
-`cz ls` works by prefetching the last couple of MB of the zip file, by using an [HTTP range request](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests). 
-If the central directory is too big to fit in the prefetch buffer, additional range requests may be issued until the entire directory is read.
+`cz ls` performs 2 [HTTP range requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests):
 
-Once the central directory is read, it is written to `stdout`, similar to the output of `unzip -l`.
+1. Fetch the last 64kB of the zip file, looking for the End Of Central Directory ([EOCD](https://en.wikipedia.org/wiki/ZIP_(file_format)#End_of_central_directory_record_(EOCD))) Marker  (and/or [EOCD64](https://en.wikipedia.org/wiki/ZIP_(file_format)#ZIP64)). 
+1. The marker contains the exact start offset and size of the [Central Directory](https://en.wikipedia.org/wiki/ZIP_(file_format)#Central_directory_file_header), which is then read by issuing another HTTP range request
 
-`cz cat` does the same thing - read the central directory, looking for the file we wish to download. Once found, we read the byte offset and size of the file, issuing a second HTTP range request, fetching the file itself.
+Once the central directory is read, it is parsed and written to `stdout`, similar to the output of `unzip -l`.
+
+`cz cat` does the same thing - read the central directory, looking for the file we wish to download. Once found, we read the byte offset and size of the file, issuing a third HTTP range request, fetching the file itself.
 
 Because zip files store each file (whether compressed or not) independently, this is enough to uncompress and write the file to `stdout`.
