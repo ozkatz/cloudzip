@@ -6,6 +6,7 @@ import (
 	"github.com/ozkatz/cloudzip/pkg/remote"
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
 	"io"
+	"strings"
 
 	"log/slog"
 	"os"
@@ -35,6 +36,18 @@ Example:
 
 `
 
+func expandStdin(arg string) (string, error) {
+	if arg != "-" {
+		return arg, nil
+	}
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return "", err
+	}
+	expanded := string(data)
+	return strings.Trim(expanded, "\n \t"), nil
+}
+
 type adapter struct {
 	f   remote.Fetcher
 	ctx context.Context
@@ -48,7 +61,11 @@ func ls(args []string) {
 	if len(args) != 1 {
 		help()
 	}
-	uri := args[0]
+	uri, err := expandStdin(args[0])
+	if err != nil {
+		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read stdin: %v\n", err))
+		os.Exit(1)
+	}
 	ctx := context.Background()
 	obj, err := remote.Object(uri)
 	if err != nil {
@@ -75,7 +92,11 @@ func cat(args []string) {
 	if len(args) != 2 {
 		help()
 	}
-	uri := args[0]
+	uri, err := expandStdin(args[0])
+	if err != nil {
+		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read stdin: %v\n", err))
+		os.Exit(1)
+	}
 	filePath := args[1]
 	ctx := context.Background()
 	obj, err := remote.Object(uri)
