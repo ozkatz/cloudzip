@@ -148,7 +148,12 @@ func (p *CentralDirectoryParser) getCDLocation() (*CDLocation, error) {
 		return nil, ErrInvalidZip
 	}
 	// check if zip64
-	if eocd.CDByteOffset == 0xffffffff && eocd.CDSizeBytes == 0xffffffff {
+	if eocd.CurrentDiskNumber == 0xffff ||
+		eocd.CDDiskNumber == 0xffff ||
+		eocd.DiskCDRs == 0xffff ||
+		eocd.TotalCDRs == 0xffff ||
+		eocd.CDByteOffset == 0xffffffff ||
+		eocd.CDSizeBytes == 0xffffffff {
 		return p.getCD64Location(buf)
 	}
 
