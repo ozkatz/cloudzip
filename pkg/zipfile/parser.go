@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"log/slog"
 	"time"
 )
 
@@ -312,10 +313,15 @@ func (p *CentralDirectoryParser) parseCDR(loc *CDLocation) ([]*CDR, error) {
 	if err != nil {
 		return nil, ErrInvalidZip
 	}
+	start := time.Now()
 	buf, err := io.ReadAll(reader)
+	slog.Debug("read Central Directory",
+		"size_bytes", len(buf), "took_ms", time.Since(start).Milliseconds())
 	if err != nil {
 		return nil, err
 	}
+
+	parsingStart := time.Now()
 	r := bytes.NewReader(buf)
 	records := make([]*CDR, 0)
 	var pos int64
@@ -330,6 +336,8 @@ func (p *CentralDirectoryParser) parseCDR(loc *CDLocation) ([]*CDR, error) {
 			return nil, err
 		}
 	}
+	slog.Debug("parse Central Directory",
+		"records", len(records), "took_ms", time.Since(parsingStart).Milliseconds())
 	return records, nil
 }
 

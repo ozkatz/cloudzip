@@ -2,9 +2,6 @@
 
 list and get specific files from remote zip archives without downloading the whole thing 
 
-> [!NOTE] 
-> currently, S3 is the only supported backend
-
 ## Installation
 
 Clone and build the project (no binaries available atm, sorry!)
@@ -89,4 +86,36 @@ Set the `$CLOUDZIP_LOGGING` environment variable to `DEBUG` to log storage calls
 ```shell
 export CLOUDZIP_LOGGING="DEBUG"
 cz ls s3://example-bucket/path/to/archive.zip  # will log S3 calls to stderr
+```
+
+## Supported backends
+
+### [AWS S3](https://aws.amazon.com/s3/)
+
+Will use the default [ AWS credentials resolution order](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html#specifying-credentials)
+
+Example:
+
+```shell
+cz ls s3://example-bucket/path/to/archive.zip
+```
+
+### HTTP / HTTPS
+
+Example:
+
+```shell
+cz ls https://example.com/path/to/archive.zip
+```
+
+
+### Local files
+
+Prefix the path with `file://` to read from the local filesystem. Can accept either relative path or absolute path.
+
+Example:
+
+```shell
+cz ls file://archive.zip  # relative to current directory (./archive.zip)
+cz ls file:///home/user/archive.zip  # absolute path (/home/user/archive.zip)
 ```

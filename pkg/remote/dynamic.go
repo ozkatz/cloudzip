@@ -15,6 +15,8 @@ func Object(uri string) (Fetcher, error) {
 		return NewS3ObjectFetcher(uri)
 	case "local", "file":
 		return NewLocalFetcher(uri)
+	case "http", "https":
+		return NewHttpFetcher(uri)
 	}
 
 	return nil, fmt.Errorf("%w: unknown scheme: %s", ErrInvalidURI, parsed.Scheme)

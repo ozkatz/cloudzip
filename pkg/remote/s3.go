@@ -3,7 +3,6 @@ package remote
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -94,17 +93,6 @@ func NewS3ObjectFetcher(uri string) (*S3ObjectFetcher, error) {
 		bucket: parsed.Bucket,
 		path:   parsed.Path,
 	}, nil
-}
-
-func buildRange(offsetStart *int64, offsetEnd *int64) *string {
-	if offsetStart != nil && offsetEnd != nil {
-		return aws.String(fmt.Sprintf("bytes=%d-%d", *offsetStart, *offsetEnd))
-	} else if offsetStart != nil {
-		return aws.String(fmt.Sprintf("bytes=%d-", *offsetStart))
-	} else if offsetEnd != nil {
-		return aws.String(fmt.Sprintf("bytes=-%d", *offsetEnd))
-	}
-	return nil
 }
 
 func (s *S3ObjectFetcher) Fetch(ctx context.Context, startOffset *int64, endOffset *int64) (io.ReadCloser, error) {
