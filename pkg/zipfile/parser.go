@@ -12,13 +12,13 @@ import (
 )
 
 const (
-	EOCDMarkerPrefetchBufferSize = 65536
-	Zip64HeaderId                = 0x0001
+	EOCDPrefetchBufferSize = 65536 // 64kb is more than enough
+	Zip64HeaderId          = 0x0001
 )
 
 var (
-	EOCDMarker   = []byte{0x50, 0x4b, 0x05, 0x06}
-	EOCD64Marker = []byte{0x50, 0x4b, 0x06, 0x06}
+	EOCDSignature   = []byte{0x50, 0x4b, 0x05, 0x06}
+	EOCD64Signature = []byte{0x50, 0x4b, 0x06, 0x06}
 )
 
 var (
@@ -123,8 +123,8 @@ func NewCentralDirectoryParser(reader OffsetFetcher) *CentralDirectoryParser {
 	}
 }
 
-func (p *CentralDirectoryParser) getEOCDMarkerBuffer() ([]byte, error) {
-	var bufSize int64 = EOCDMarkerPrefetchBufferSize
+func (p *CentralDirectoryParser) getEOCDBuffer() ([]byte, error) {
+	var bufSize int64 = EOCDPrefetchBufferSize
 	r, err := p.reader.Fetch(nil, &bufSize)
 	if err != nil {
 		return nil, err
@@ -133,13 +133,13 @@ func (p *CentralDirectoryParser) getEOCDMarkerBuffer() ([]byte, error) {
 }
 
 func (p *CentralDirectoryParser) getCDLocation() (*CDLocation, error) {
-	buf, err := p.getEOCDMarkerBuffer()
+	buf, err := p.getEOCDBuffer()
 	if err != nil {
 		return nil, err
 	}
-	eocdStartOffset := bytes.LastIndex(buf, EOCDMarker)
+	eocdStartOffset := bytes.LastIndex(buf, EOCDSignature)
 	if eocdStartOffset == -1 {
-		// no magic string found!
+		// no signature found!
 		return nil, ErrInvalidZip
 	}
 	eocd := &EOCD{}
@@ -160,9 +160,9 @@ func (p *CentralDirectoryParser) getCDLocation() (*CDLocation, error) {
 }
 
 func (p *CentralDirectoryParser) getCD64Location(buf []byte) (*CDLocation, error) {
-	eocdStartOffset := bytes.LastIndex(buf, EOCD64Marker)
+	eocdStartOffset := bytes.LastIndex(buf, EOCD64Signature)
 	if eocdStartOffset == -1 {
-		// no magic string found!
+		// no signature found!
 		return nil, ErrInvalidZip
 	}
 	eocd := &EOCD64{}
@@ -180,7 +180,7 @@ func (p *CentralDirectoryParser) getCD64Location(buf []byte) (*CDLocation, error
 
 func parseZip64ExtraFields(extraFields []byte) *zip64ExtraFields {
 	var ef zip64ExtraFields
-	var zip64Offset int = -1
+	zip64Offset := -1
 	var i int
 	for i < len(extraFields) {
 		header := binary.LittleEndian.Uint16(extraFields[i : i+2])
@@ -330,6 +330,39 @@ func (p *CentralDirectoryParser) GetCentralDirectory() ([]*CDR, error) {
 	return p.parseCDR(loc)
 }
 
+func (p *CentralDirectoryParser) readerForRecord(f *CDR) (io.Reader, error) {
+	// found record!
+	off := f.LocalFileHeaderOffset
+	approxHeaderSize := uint64(p.localHeaderSizeHeuristic(f.FileName))
+	approxTotalSize := f.CompressedSizeBytes + approxHeaderSize
+
+	// open a reader at offset
+	dataReader, err := p.reader.Fetch(offset(off), offset(off+approxTotalSize))
+	if err != nil {
+		return nil, err
+	}
+	h := &localHeader{}
+	err = binary.Read(dataReader, binary.LittleEndian, h)
+	if err != nil {
+		return nil, ErrInvalidZip
+	}
+
+	// read local header
+	bodyStartsAt := h.ExtraFieldLength + h.FileNameLength
+	n, err := dataReader.Read(make([]byte, bodyStartsAt))
+	if err != nil || n != int(bodyStartsAt) {
+		return nil, ErrInvalidZip
+	}
+	// limit reader to the size of the compressed bytes
+	dataReader = io.LimitReader(dataReader, int64(f.CompressedSizeBytes))
+
+	// now we should have a stream of the body, let's see if we have need to inflate it:
+	if f.CompressionMethod == zip.Deflate {
+		return flate.NewReader(dataReader), nil
+	}
+	return dataReader, nil
+}
+
 func (p *CentralDirectoryParser) Read(fileName string) (io.Reader, error) {
 	directory, err := p.GetCentralDirectory()
 	if err != nil {
@@ -337,36 +370,7 @@ func (p *CentralDirectoryParser) Read(fileName string) (io.Reader, error) {
 	}
 	for _, f := range directory {
 		if f.FileName == fileName {
-			// found record!
-			off := f.LocalFileHeaderOffset
-			approxHeaderSize := uint64(p.localHeaderSizeHeuristic(f.FileName))
-			approxTotalSize := f.CompressedSizeBytes + approxHeaderSize
-
-			// open a reader at offset
-			dataReader, err := p.reader.Fetch(offset(off), offset(off+approxTotalSize))
-			if err != nil {
-				return nil, err
-			}
-			h := &localHeader{}
-			err = binary.Read(dataReader, binary.LittleEndian, h)
-			if err != nil {
-				return nil, ErrInvalidZip
-			}
-
-			// read local header
-			bodyStartsAt := h.ExtraFieldLength + h.FileNameLength
-			n, err := dataReader.Read(make([]byte, bodyStartsAt))
-			if err != nil || n != int(bodyStartsAt) {
-				return nil, ErrInvalidZip
-			}
-			// limit reader to the size of the compressed bytes
-			dataReader = io.LimitReader(dataReader, int64(f.CompressedSizeBytes))
-
-			// now we should have a stream of the body, let's see if we have need to inflate it:
-			if f.CompressionMethod == zip.Deflate {
-				return flate.NewReader(dataReader), nil
-			}
-			return dataReader, nil
+			return p.readerForRecord(f)
 		}
 	}
 	return nil, ErrFileNotFound
