@@ -108,6 +108,13 @@ Example:
 cz ls https://example.com/path/to/archive.zip
 ```
 
+### [lakeFS](https://github.com/treeverse/lakeFS)
+
+Since lakeFS can return pre-signed URLs which are HTTP(s), we can simply do:
+
+```shell
+lakectl fs presign lakefs://repository/ref/archive.zip | cz ls -
+```
 
 ### Local files
 
@@ -119,3 +126,4 @@ Example:
 cz ls file://archive.zip  # relative to current directory (./archive.zip)
 cz ls file:///home/user/archive.zip  # absolute path (/home/user/archive.zip)
 ```
+
