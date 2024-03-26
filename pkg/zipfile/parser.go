@@ -221,6 +221,92 @@ func offset(n uint64) *int64 {
 	return &a
 }
 
+func ReadCDR(r io.Reader) (*CDR, error) {
+	cdr := &CDR{}
+	metadata := &cdrMetadata{}
+	err := binary.Read(r, binary.LittleEndian, metadata)
+	if err != nil {
+		return nil, err
+	}
+	cdr.CRC32Uncompressed = metadata.CRC32Uncompressed
+	cdr.CompressionMethod = metadata.CompressionMethod
+	cdr.Modified = msDosTimeToTime(metadata.ModDate, metadata.ModTime)
+
+	var mode fs.FileMode
+	switch metadata.CreatorVersion >> 8 {
+	case creatorUnix, creatorMacOSX:
+		mode = unixModeToFileMode(metadata.ExternalFileAttributes >> 16)
+	case creatorNTFS, creatorVFAT, creatorFAT:
+		mode = msdosModeToFileMode(metadata.ExternalFileAttributes)
+	}
+
+	fileNameBuffer := make([]byte, metadata.FileNameLength)
+	if metadata.FileNameLength > 0 {
+		_, err = r.Read(fileNameBuffer)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	extraFieldBuffer := make([]byte, metadata.ExtraFieldLength)
+	if metadata.ExtraFieldLength > 0 {
+		_, err = r.Read(extraFieldBuffer)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	fileCommentBuffer := make([]byte, metadata.FileCommentLength)
+	if metadata.FileCommentLength > 0 {
+		_, err = r.Read(fileCommentBuffer)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	cdr.FileName = string(fileNameBuffer)
+	cdr.ExtraFields = extraFieldBuffer
+	cdr.FileComment = fileCommentBuffer
+
+	zip64Fields := parseZip64ExtraFields(cdr.ExtraFields)
+
+	if metadata.UncompressedSizeBytesRaw == 0xffffffff {
+		// zip64
+		if zip64Fields == nil {
+			return nil, ErrInvalidZip
+		}
+		cdr.UncompressedSizeBytes = zip64Fields.UncompressedSizeBytes
+	} else {
+		cdr.UncompressedSizeBytes = uint64(metadata.UncompressedSizeBytesRaw)
+	}
+
+	if metadata.CompressedSizeBytesRaw == 0xffffffff {
+		// zip64
+		if zip64Fields == nil {
+			return nil, ErrInvalidZip
+		}
+		cdr.CompressedSizeBytes = zip64Fields.CompressedSizeBytes
+	} else {
+		cdr.CompressedSizeBytes = uint64(metadata.CompressedSizeBytesRaw)
+	}
+
+	if metadata.LocalFileHeaderOffsetRaw == 0xffffffff {
+		//  zip64
+		if zip64Fields == nil {
+			return nil, ErrInvalidZip
+		}
+		cdr.LocalFileHeaderOffset = zip64Fields.LocalFileHeaderOffset
+	} else {
+		cdr.LocalFileHeaderOffset = uint64(metadata.LocalFileHeaderOffsetRaw)
+	}
+
+	if len(cdr.FileName) > 0 && cdr.FileName[len(cdr.FileName)-1] == '/' {
+		mode |= fs.ModeDir
+	}
+	cdr.Mode = mode
+	return cdr, nil
+}
+
 func (p *CentralDirectoryParser) parseCDR(loc *CDLocation) ([]*CDR, error) {
 	reader, err := p.reader.Fetch(offset(loc.Offset), offset(loc.Offset+loc.SizeBytes))
 	if err != nil {
@@ -234,90 +320,10 @@ func (p *CentralDirectoryParser) parseCDR(loc *CDLocation) ([]*CDR, error) {
 	records := make([]*CDR, 0)
 	var pos int64
 	for pos < int64(loc.SizeBytes) {
-		cdr := &CDR{}
-		metadata := &cdrMetadata{}
-		err := binary.Read(r, binary.LittleEndian, metadata)
+		cdr, err := ReadCDR(r)
 		if err != nil {
 			return nil, err
 		}
-		cdr.CRC32Uncompressed = metadata.CRC32Uncompressed
-		cdr.CompressionMethod = metadata.CompressionMethod
-		cdr.Modified = msDosTimeToTime(metadata.ModDate, metadata.ModTime)
-
-		var mode fs.FileMode
-		switch metadata.CreatorVersion >> 8 {
-		case creatorUnix, creatorMacOSX:
-			mode = unixModeToFileMode(metadata.ExternalFileAttributes >> 16)
-		case creatorNTFS, creatorVFAT, creatorFAT:
-			mode = msdosModeToFileMode(metadata.ExternalFileAttributes)
-		}
-
-		fileNameBuffer := make([]byte, metadata.FileNameLength)
-		if metadata.FileNameLength > 0 {
-			_, err = r.Read(fileNameBuffer)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		extraFieldBuffer := make([]byte, metadata.ExtraFieldLength)
-		if metadata.ExtraFieldLength > 0 {
-			_, err = r.Read(extraFieldBuffer)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		fileCommentBuffer := make([]byte, metadata.FileCommentLength)
-		if metadata.FileCommentLength > 0 {
-			_, err = r.Read(fileCommentBuffer)
-			if err != nil {
-				return nil, err
-			}
-
-		}
-
-		cdr.FileName = string(fileNameBuffer)
-		cdr.ExtraFields = extraFieldBuffer
-		cdr.FileComment = fileCommentBuffer
-
-		zip64Fields := parseZip64ExtraFields(cdr.ExtraFields)
-
-		if metadata.UncompressedSizeBytesRaw == 0xffffffff {
-			// zip64
-			if zip64Fields == nil {
-				return nil, ErrInvalidZip
-			}
-			cdr.UncompressedSizeBytes = zip64Fields.UncompressedSizeBytes
-		} else {
-			cdr.UncompressedSizeBytes = uint64(metadata.UncompressedSizeBytesRaw)
-		}
-
-		if metadata.CompressedSizeBytesRaw == 0xffffffff {
-			// zip64
-			if zip64Fields == nil {
-				return nil, ErrInvalidZip
-			}
-			cdr.CompressedSizeBytes = zip64Fields.CompressedSizeBytes
-		} else {
-			cdr.CompressedSizeBytes = uint64(metadata.CompressedSizeBytesRaw)
-		}
-
-		if metadata.LocalFileHeaderOffsetRaw == 0xffffffff {
-			//  zip64
-			if zip64Fields == nil {
-				return nil, ErrInvalidZip
-			}
-			cdr.LocalFileHeaderOffset = zip64Fields.LocalFileHeaderOffset
-		} else {
-			cdr.LocalFileHeaderOffset = uint64(metadata.LocalFileHeaderOffsetRaw)
-		}
-
-		if len(cdr.FileName) > 0 && cdr.FileName[len(cdr.FileName)-1] == '/' {
-			mode |= fs.ModeDir
-		}
-		cdr.Mode = mode
-
 		records = append(records, cdr)
 		pos, err = r.Seek(0, io.SeekCurrent)
 		if err != nil {
