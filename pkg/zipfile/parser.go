@@ -137,7 +137,7 @@ func (p *CentralDirectoryParser) getCDLocation() (*CDLocation, error) {
 	if err != nil {
 		return nil, err
 	}
-	eocdStartOffset := bytes.Index(buf, EOCDMarker)
+	eocdStartOffset := bytes.LastIndex(buf, EOCDMarker)
 	if eocdStartOffset == -1 {
 		// no magic string found!
 		return nil, ErrInvalidZip
@@ -160,7 +160,7 @@ func (p *CentralDirectoryParser) getCDLocation() (*CDLocation, error) {
 }
 
 func (p *CentralDirectoryParser) getCD64Location(buf []byte) (*CDLocation, error) {
-	eocdStartOffset := bytes.Index(buf, EOCD64Marker)
+	eocdStartOffset := bytes.LastIndex(buf, EOCD64Marker)
 	if eocdStartOffset == -1 {
 		// no magic string found!
 		return nil, ErrInvalidZip
