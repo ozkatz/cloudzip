@@ -1,10 +1,12 @@
 package zipfile_test
 
 import (
+	"bytes"
 	"context"
 	"github.com/ozkatz/cloudzip/pkg/remote"
 	"hash/crc32"
 	"io"
+	"os"
 	"testing"
 
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
@@ -28,6 +30,43 @@ func parser(uri string) (*zipfile.CentralDirectoryParser, error) {
 		ctx: context.Background(),
 		f:   fetcher,
 	}), nil
+}
+
+type byteReadSeekCloser struct {
+	*bytes.Reader
+}
+
+func (b *byteReadSeekCloser) Close() error {
+	return nil
+}
+
+func memParser(data []byte) *zipfile.CentralDirectoryParser {
+	fetcher := remote.NewLocalFetcherFromData(&byteReadSeekCloser{Reader: bytes.NewReader(data)})
+	return zipfile.NewCentralDirectoryParser(&adapter{
+		ctx: context.Background(),
+		f:   fetcher,
+	})
+}
+
+func BenchmarkCentralDirectoryParser_Read(b *testing.B) {
+	zip, err := os.Open("testdata/big_directory.zip")
+	if err != nil {
+		b.Fatalf("could not load big directory: %v\n", err)
+	}
+	data, err := io.ReadAll(zip)
+	if err != nil {
+		b.Fatalf("could not read big directory: %v\n", err)
+	}
+	parser := memParser(data)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StartTimer()
+		_, err := parser.GetCentralDirectory()
+		b.StopTimer()
+		if err != nil {
+			b.Fatalf("could not load big directory: %v\n", err)
+		}
+	}
 }
 
 func TestCentralDirectoryParser_GetCentralDirectory(t *testing.T) {

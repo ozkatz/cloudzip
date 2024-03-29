@@ -10,8 +10,20 @@ import (
 	"syscall"
 )
 
+type ReadSeekerCloser interface {
+	io.Reader
+	io.Seeker
+	io.Closer
+}
+
 type LocalFetcher struct {
-	handle *os.File
+	handle ReadSeekerCloser
+}
+
+func NewLocalFetcherFromData(data ReadSeekerCloser) *LocalFetcher {
+	return &LocalFetcher{
+		handle: data,
+	}
 }
 
 func NewLocalFetcher(uri string) (*LocalFetcher, error) {
