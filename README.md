@@ -2,6 +2,9 @@
 
 list and get specific files from remote zip archives without downloading the whole thing 
 
+> [!TIP]
+> **New:** Experimental support for mounting a remote zip file as a local directory. See [mounting](#%EF%B8%8F-experimental-mounting) below.
+
 ## Installation
 
 Clone and build the project (no binaries available atm, sorry!)
@@ -32,7 +35,45 @@ Downloading and extracting a specific object from within a zip file:
 cz cat "s3://example-bucket/path/to/archive.zip" "images/cat.png" > cat.png
 ```
 
-## Why does this exist?
+### ⚠️ Experimental: Mounting
+
+Instead of listing and downloading individual files from the remote zip, you can now mount it to a local directory.
+
+```shell
+cz mount "s3://example-bucket/path/to/archive.zip" "my_dir/"
+```
+
+This would show up on your local filesystem as a directory with the contents of the zip archive inside it - as if you've downloaded and extracted it.
+
+However... behind the scenes, it would fetch only the file listing from the remote zip (just like `cz ls`) and spin up a small NFS server, listening on localhost, and mount it to `my_dir/`.
+
+When reading files from `my_dir/`, they will be downloaded and decompressed on-the-fly, just like `cz cat` does.
+
+Files are downloaded into a cache dir, which if not explicitly set, will be purged when unmounted.
+To set it to a specific location (and retain it across mount/umount cycles), set the `CLOUDZIP_CACHE_DIR` environment variable:
+
+```shell
+export CLOUDZIP_CACHE_DIR="/nvme/fast/cache"
+cz mount "s3://example-bucket/path/to/archive.zip" "my_dir/"
+```
+
+To unmount:
+
+```shell
+cz umount "my_dir/"
+```
+
+which will unmount the NFS share from the directory, and terminate the local NFS server for you.
+
+#### Mounting, illustrated:
+
+<img src="docs/mounts.png"/>
+
+> [!CAUTION]
+> This is still experimental (and only supported on Linux and MacOS for now)
+
+
+## Why does `cz` exist?
 
 My use case was a pretty specific access pattern:
 
