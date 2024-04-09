@@ -1,19 +1,26 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/ozkatz/cloudzip/pkg/fs"
 	"github.com/ozkatz/cloudzip/pkg/remote"
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
-	"io"
-	"strings"
-
-	"log/slog"
-	"os"
-	"time"
 )
 
-var HelpText = `cz - cloud zip
+const (
+	MountServerBindAddress = "127.0.0.1:0"
+	HelpText               = `cz - cloud zip
 Efficiently list and read from remote zip files (without downloading the entire file)
 
 cz ls:
@@ -25,6 +32,7 @@ Example:
 	
 	cz ls s3://example-bucket/path/to/object.zip
 
+
 cz cat:
 Usage: cz cat <remote zip file URI> <file path>
 
@@ -34,7 +42,28 @@ Example:
 
 	cz cat s3://example-bucket/path/to/object.zip images/file.png
 
+
+cz mount:
+Usage: cz mount <remote zip file URI> <local directory path>
+
+Virtually mount the zip file onto a local directory
+
+Example:
+
+	cz mount s3://example-bucket/path/to/object.zip /my_zip
+
+
+cz umount:
+Usage: cz mount <local directory path>
+
+Unmounts a currently mounted zip file at the given directory
+
+Example:
+
+	cz umount /my_zip
+
 `
+)
 
 func expandStdin(arg string) (string, error) {
 	if arg != "-" {
@@ -48,6 +77,49 @@ func expandStdin(arg string) (string, error) {
 	return strings.Trim(expanded, "\n \t"), nil
 }
 
+func die(fstring string, args ...interface{}) {
+	_, _ = os.Stderr.WriteString(fmt.Sprintf(fstring, args...))
+	os.Exit(1)
+}
+
+func helpNoFail() {
+	_, _ = os.Stderr.WriteString(HelpText)
+}
+
+func help() {
+	helpNoFail()
+	os.Exit(1)
+}
+
+func assertArgCount(args []string, required int) {
+	if len(args) != required {
+		help()
+	}
+}
+
+func setupLogging() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		AddSource: true,
+		Level:     slog.LevelError,
+	})))
+	if os.Getenv("CLOUDZIP_LOGGING") == "DEBUG" {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			AddSource: true,
+			Level:     slog.LevelDebug,
+		})))
+	}
+}
+
+func isDir(path string) (bool, error) {
+	stat, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return stat.IsDir(), nil
+}
+
 type adapter struct {
 	f   remote.Fetcher
 	ctx context.Context
@@ -57,17 +129,14 @@ func (a *adapter) Fetch(start, end *int64) (io.Reader, error) {
 	return a.f.Fetch(a.ctx, start, end)
 }
 
-func ls(args []string) {
-	if len(args) != 1 {
-		help()
-	}
-	uri, err := expandStdin(args[0])
+func ls(remoteFile string) {
+	zipfilePath, err := expandStdin(remoteFile)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read stdin: %v\n", err))
 		os.Exit(1)
 	}
 	ctx := context.Background()
-	obj, err := remote.Object(uri)
+	obj, err := remote.Object(zipfilePath)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open remote zip file: %v\n", err))
 		os.Exit(1)
@@ -88,16 +157,12 @@ func ls(args []string) {
 	}
 }
 
-func cat(args []string) {
-	if len(args) != 2 {
-		help()
-	}
-	uri, err := expandStdin(args[0])
+func cat(remoteFile, path string) {
+	uri, err := expandStdin(remoteFile)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read stdin: %v\n", err))
 		os.Exit(1)
 	}
-	filePath := args[1]
 	ctx := context.Background()
 	obj, err := remote.Object(uri)
 	if err != nil {
@@ -108,7 +173,7 @@ func cat(args []string) {
 		f:   obj,
 		ctx: ctx,
 	})
-	reader, err := zip.Read(filePath)
+	reader, err := zip.Read(path)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open zip file stream: %v\n", err))
 		os.Exit(1)
@@ -120,9 +185,89 @@ func cat(args []string) {
 	}
 }
 
-func help() {
-	_, _ = os.Stderr.WriteString(HelpText)
-	os.Exit(1)
+func mountServer(zipFileURI string) {
+	cacheDir := os.Getenv("CLOUDZIP_CACHE_DIR")
+	if cacheDir == "" {
+		cacheDir = filepath.Join(os.TempDir(), "lakefs-mount-cache")
+	}
+	dirExists, err := isDir(cacheDir)
+	if err != nil {
+		die("could not check if cache directory '%s' exists: %v\n", cacheDir, err)
+	}
+	if !dirExists {
+		err := os.MkdirAll(cacheDir, 0755)
+		if err != nil {
+			die("could not create local cache directory: %v\n", err)
+		}
+	}
+
+	listener, err := net.Listen("tcp", MountServerBindAddress)
+	if err != nil {
+		die("could not listen on %s: %v\n", MountServerBindAddress, err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	// we output to stdout to signal back to the caller that this is the selected TCP port to connect to
+	fmt.Printf("%d\n", port)
+
+	handler, err := fs.NewNFSServer(cacheDir, zipFileURI)
+	if err != nil {
+		die("could not start NFS server: %v\n", err)
+	}
+
+	err = fs.Serve(listener, handler)
+	if err != nil {
+		die("could not serve on %s: %v\n", MountServerBindAddress, err)
+	}
+}
+
+func mount(remoteFile, targetDirectory string) {
+	uri, err := expandStdin(remoteFile)
+	if err != nil {
+		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read stdin: %v\n", err))
+		os.Exit(1)
+	}
+	pid, stdout, err := fs.Daemonize("mount-server", uri)
+	if err != nil {
+		die("could not spawn NFS server: %v\n", err)
+	}
+	scanner := bufio.NewScanner(stdout)
+	var serverPort int
+	for scanner.Scan() {
+		received := scanner.Text()
+		serverPort, err = strconv.Atoi(received)
+		if err != nil {
+			die("could not parse port from NFS server: %v", err)
+		}
+		break // we only care about first line
+	}
+	if err := scanner.Err(); err != nil {
+		die("could not get back port from NFS server: %v", err)
+	}
+	slog.Info("NFS server started", "pid", pid, "port", serverPort)
+
+	// create directory if it doesn't exist
+	dirExists, err := isDir(targetDirectory)
+	if err != nil {
+		die("could not check if target directory '%s' exists: %v\n", targetDirectory, err)
+	}
+	if !dirExists {
+		err := os.MkdirAll(targetDirectory, 0700)
+		if err != nil {
+			die("could not create target directory: %v\n", err)
+		}
+	}
+
+	// now mount it
+	if err := fs.Mount(serverPort, targetDirectory); err != nil {
+		die("could not run mount command: %v\n", err)
+	}
+}
+
+func umount(directory string) {
+	err := fs.Umount(directory)
+	if err != nil {
+		die("could not unmount directory '%s': %v\n", directory, err)
+	}
 }
 
 func main() {
@@ -130,24 +275,27 @@ func main() {
 	if len(args) < 2 {
 		help()
 	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		AddSource: true,
-		Level:     slog.LevelError,
-	})))
-	if os.Getenv("CLOUDZIP_LOGGING") == "DEBUG" {
-		slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-			AddSource: true,
-			Level:     slog.LevelDebug,
-		})))
-	}
+	setupLogging()
+	// run:
 	sub := args[1]
 	switch sub {
 	case "ls":
-		ls(args[2:])
+		assertArgCount(args, 3)
+		ls(args[2])
 	case "cat":
-		cat(args[2:])
+		assertArgCount(args, 4)
+		cat(args[2], args[3])
+	case "mount":
+		assertArgCount(args, 4)
+		mount(args[2], args[3])
+	case "umount", "unmount":
+		assertArgCount(args, 3)
+		umount(args[2])
+	case "mount-server":
+		assertArgCount(args, 3)
+		mountServer(args[2])
 	case "help":
-		help()
+		helpNoFail()
 	default:
 		help()
 	}

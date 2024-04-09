@@ -22,6 +22,8 @@ go.work
 
 # binary
 cz
+cz.linux
+cz.exe
 
 # IDEs and editors
 .vscode/
