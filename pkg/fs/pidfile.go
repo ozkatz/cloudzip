@@ -47,6 +47,10 @@ type billyPidFile struct {
 	stat *billyPidFileStat
 }
 
+func (b *billyPidFile) WriteAt(p []byte, off int64) (n int, err error) {
+	return 0, billy.ErrNotSupported
+}
+
 func (b *billyPidFile) Name() string {
 	return b.name
 }

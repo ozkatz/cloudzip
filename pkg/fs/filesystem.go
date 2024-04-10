@@ -1,10 +1,7 @@
 package fs
 
 import (
-	"archive/zip"
 	"context"
-	"errors"
-	"io"
 	"os"
 	"path"
 	"sort"
@@ -16,13 +13,15 @@ import (
 )
 
 const (
-	PidFilePath = ".cz.nfs.pid"
+	PidFilePath    = ".cz.nfs.pid"
+	DefaultDirMask = 0755
 )
 
 type ZipFS struct {
-	Remote    ZipFileURI
-	Directory []*zipfile.CDR
-	fileCache *FileCache
+	Remote ZipFileURI
+	Tree   Tree
+	Opener Opener
+
 	startTime time.Time
 }
 
@@ -40,11 +39,41 @@ func NewZipFS(cacheDir, remoteZipURI string) (billy.Filesystem, error) {
 	if err != nil {
 		return nil, err
 	}
+	remoteUri := ZipFileURI(remoteZipURI)
+	startTime := time.Now()
+
+	// build index
+	infos := make([]os.FileInfo, 0)
+	for _, f := range cdr {
+		infos = append(infos, &ZipFileInfo{
+			Remote: remoteUri,
+			Path:   f.FileName,
+			CDR:    f,
+		})
+	}
+	// add pid file
+	infos = append(infos, pidFile(PidFilePath, os.Getpid(), startTime).Stat())
+
+	// sort it
+	sort.Sort(ByName(infos))
+	tree := NewInMemoryTreeBuilder(func(entry string) os.FileInfo {
+		return &IndexFileInfo{
+			SetName:    entry,
+			SetMode:    os.ModeDir | DefaultDirMask,
+			SetModTime: startTime,
+		}
+	})
+	tree.Index(infos)
+
+	// build opener
+	cache := NewFileCache(cacheDir)
+	opener := NewZipOpener(startTime, remoteUri, cdr, cache)
+
 	filesys := &ZipFS{
-		Remote:    ZipFileURI(remoteZipURI),
-		Directory: cdr,
-		fileCache: NewFileCache(cacheDir),
-		startTime: time.Now(),
+		Remote:    remoteUri,
+		Tree:      tree,
+		Opener:    opener,
+		startTime: startTime,
 	}
 	return filesys, nil
 }
@@ -58,80 +87,16 @@ func (fs *ZipFS) Open(filename string) (billy.File, error) {
 }
 
 func (fs *ZipFS) OpenFile(filename string, flag int, perm os.FileMode) (billy.File, error) {
-	if path.Clean(filename) == PidFilePath {
-		return pidFile(PidFilePath, os.Getpid(), fs.startTime), nil
-	}
-	info, err := fs.Stat(filename)
-	if err != nil {
-		return nil, err
-	}
-	filename = path.Clean(filename)
-	zipInfo := info.(*ZipFileInfo)
-	cacheKey := FileCacheKey{
-		zipfile:  fs.Remote,
-		path:     filename,
-		checksum: zipInfo.cdr.CRC32Uncompressed,
-	}
-	f, err := fs.fileCache.Get(cacheKey)
-	if errors.Is(err, os.ErrNotExist) {
-		// cache miss!
-		remoteZip, err := remote.Object(string(fs.Remote))
-		if err != nil {
-			return nil, err
-		}
-		zip := zipfile.NewCentralDirectoryParser(&adapter{
-			f:   remoteZip,
-			ctx: context.Background(),
-		})
-		reader, err := zip.Read(filename)
-		if err != nil {
-			return nil, err
-		}
-		f, err := fs.fileCache.Set(cacheKey, io.NopCloser(reader), zipInfo.Size())
-		return &ZipFile{
-			Remote: fs.Remote,
-			Path:   filename,
-			f:      f,
-		}, nil
-	} else if err != nil {
-		return nil, err
-	}
-	// cache hit!
-	return &ZipFile{
-		Remote: fs.Remote,
-		Path:   filename,
-		f:      f,
-	}, nil
+	return fs.Opener.Open(filename)
 }
 
 func (fs *ZipFS) Stat(filename string) (os.FileInfo, error) {
+	info, err := fs.Tree.Stat(filename)
+	if err != nil {
+		return nil, err
+	}
 	base := path.Base(filename) // stat should always return the base name?
-	if filename == "" {         // root
-		return &ZipFileInfo{
-			Remote: fs.Remote,
-			Path:   base,
-			cdr: &zipfile.CDR{
-				CompressionMethod:     zip.Store,
-				Modified:              fs.startTime,
-				Mode:                  os.ModeDir,
-				LocalFileHeaderOffset: 0,
-				FileName:              base,
-			},
-		}, nil
-	}
-	if path.Clean(filename) == PidFilePath {
-		return pidFile(base, os.Getpid(), fs.startTime).Stat(), nil
-	}
-	for _, f := range fs.Directory {
-		if path.Clean(f.FileName) == path.Clean(filename) {
-			return &ZipFileInfo{
-				Remote: fs.Remote,
-				Path:   base,
-				cdr:    f,
-			}, nil
-		}
-	}
-	return nil, os.ErrNotExist
+	return fileInfoWithName(info, base), nil
 }
 
 func (fs *ZipFS) Rename(oldpath, newpath string) error {
@@ -150,34 +115,8 @@ func (fs *ZipFS) TempFile(dir, prefix string) (billy.File, error) {
 	return nil, billy.ErrReadOnly
 }
 
-type ByName []os.FileInfo
-
-func (a ByName) Len() int           { return len(a) }
-func (a ByName) Less(i, j int) bool { return a[i].Name() < a[j].Name() }
-func (a ByName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-
 func (fs *ZipFS) ReadDir(name string) ([]os.FileInfo, error) {
-	results := make([]os.FileInfo, 0)
-	for _, f := range fs.Directory {
-		current := path.Clean(f.FileName)
-		// filter only direct descendants of filePath
-		if !IsDirectDescendant(current, name) {
-			continue
-		}
-		results = append(results, &ZipFileInfo{
-			Remote: fs.Remote,
-			Path:   current,
-			cdr:    f,
-		})
-
-	}
-	// add pid file if root directory
-	if name == "" {
-		pf := pidFile(PidFilePath, os.Getpid(), fs.startTime)
-		results = append(results, pf.Stat())
-	}
-	sort.Sort(ByName(results))
-	return results, nil
+	return fs.Tree.Readdir(name)
 }
 
 func (fs *ZipFS) MkdirAll(filename string, perm os.FileMode) error {
