@@ -39,7 +39,10 @@ func TestInMemoryTreeBuilder_Readdir(t *testing.T) {
 		}
 	}
 	sort.Sort(infos)
-	idx.Index(infos)
+	err := idx.Index(infos)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// root
 	children, err := idx.Readdir("")
