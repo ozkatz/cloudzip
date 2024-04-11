@@ -209,10 +209,10 @@ func parseZip64ExtraFields(extraFields []byte) *zip64ExtraFields {
 		ef.CompressedSizeBytes = binary.LittleEndian.Uint64(extraFields[zip64Offset+12 : zip64Offset+20])
 	}
 	if zip64ChunkSize >= 24 {
-		ef.UncompressedSizeBytes = binary.LittleEndian.Uint64(extraFields[zip64Offset+20 : zip64Offset+28])
+		ef.LocalFileHeaderOffset = binary.LittleEndian.Uint64(extraFields[zip64Offset+20 : zip64Offset+28])
 	}
 	if zip64ChunkSize >= 32 {
-		ef.LocalFileHeaderOffset = binary.LittleEndian.Uint64(extraFields[zip64Offset+28 : zip64Offset+32])
+		ef.FileStartDiskNumber = binary.LittleEndian.Uint32(extraFields[zip64Offset+28 : zip64Offset+32])
 	}
 	return &ef
 }
