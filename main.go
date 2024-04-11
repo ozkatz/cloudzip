@@ -153,8 +153,8 @@ func ls(remoteFile string) {
 		os.Exit(1)
 	}
 	for _, f := range files {
-		fmt.Printf("%s\t%-12d\t%s\t%s\n",
-			f.Mode, f.UncompressedSizeBytes, f.Modified.Format(time.RFC822Z), f.FileName)
+		fmt.Printf("%s\t%-12d\t%-12d\t%s\t%s\n",
+			f.Mode, f.CompressedSizeBytes, f.UncompressedSizeBytes, f.Modified.Format(time.RFC822Z), f.FileName)
 	}
 }
 
