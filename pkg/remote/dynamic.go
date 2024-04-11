@@ -17,6 +17,8 @@ func Object(uri string) (Fetcher, error) {
 		return NewLocalFetcher(uri)
 	case "http", "https":
 		return NewHttpFetcher(uri)
+	case "kaggle":
+		return NewKaggleFetcher(uri)
 	}
 
 	return nil, fmt.Errorf("%w: unknown scheme: %s", ErrInvalidURI, parsed.Scheme)

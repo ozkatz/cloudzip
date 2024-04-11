@@ -1,9 +1,8 @@
-package base
+package mount
 
 import (
 	"errors"
 	"fmt"
-	"github.com/ozkatz/cloudzip/pkg/fs/nfs"
 	"io"
 	"os"
 	"os/exec"
@@ -20,8 +19,8 @@ const (
 )
 
 var (
-	MountError     = errors.New("mount command failed")
-	ErrNotOurMount = errors.New("not a zip mount")
+	CommandError   = errors.New("mount command failed")
+	ErrNotOurMount = errors.New("this mount is not managed by cz")
 )
 
 func execMountCommand(name string, args ...string) error {
@@ -29,22 +28,21 @@ func execMountCommand(name string, args ...string) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		cmdText := fmt.Sprintf("%s %s", name, strings.Join(args, " "))
-		return fmt.Errorf("%w: \"%s\":\n%s\n%s", MountError, cmdText, out, err)
+		return fmt.Errorf("%w: \"%s\":\n%s\n%s", CommandError, cmdText, out, err)
 	}
 	return nil
 }
 
-func readPidFile(root string) (int, error) {
-	pidFilePath := filepath.Join(root, nfs.PidFilePath)
-	data, err := os.ReadFile(pidFilePath)
+func readPidFile(filepath string) (int, error) {
+	data, err := os.ReadFile(filepath)
 	if os.IsNotExist(err) {
-		return 0, fmt.Errorf("%s: %w", root, ErrNotOurMount)
+		return 0, fmt.Errorf("%s: %w", filepath, ErrNotOurMount)
 	} else if err != nil {
 		return 0, err
 	}
 	pid, err := strconv.Atoi(string(data))
 	if err != nil {
-		return 0, fmt.Errorf("%w: could not read mount server pid file", MountError)
+		return 0, fmt.Errorf("%w: could not read mount server pid file", CommandError)
 	}
 	return pid, nil
 }
@@ -86,11 +84,11 @@ func Mount(port int, location string) error {
 		// TODO(ozkatz)
 	}
 
-	return MountError
+	return CommandError
 }
 
 func Umount(location string) error {
-	pid, err := readPidFile(location)
+	pid, err := readPidFile(filepath.Join(location, ".cz/server.pid"))
 	if err != nil {
 		return err
 	}
@@ -105,7 +103,7 @@ func Umount(location string) error {
 	case GOOSWindows:
 		// TODO(ozkatz)
 	}
-	return MountError
+	return CommandError
 }
 
 // fork crete a new process
