@@ -65,8 +65,8 @@ func NewZipFS(cacheDir, remoteZipURI string) (billy.Filesystem, error) {
 		})
 	}
 
-	// TODO(ozkatz): add pid file
-	infos = append(infos, procfs.NewProcFile(ProcPidFilePath, []byte(strconv.Itoa(os.Getpid())), startTime))
+	// "proc" filesystem exposed to users
+	infos = append(infos, procfs.NewProcFile(".cz/server.pid", []byte(strconv.Itoa(os.Getpid())), startTime))
 	infos = append(infos, procfs.NewProcFile(".cz/cachedir", []byte(cacheDir), startTime))
 	infos = append(infos, procfs.NewProcFile(".cz/source", []byte(remoteZipURI), startTime))
 
@@ -84,7 +84,10 @@ func NewZipFS(cacheDir, remoteZipURI string) (billy.Filesystem, error) {
 			Opener:    nil,
 		}
 	})
-	tree.Index(infos)
+	err = tree.Index(infos)
+	if err != nil {
+		return nil, err
+	}
 	return &ZipFS{
 		Remote:    remoteZipURI,
 		Tree:      tree,

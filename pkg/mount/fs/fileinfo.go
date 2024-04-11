@@ -58,20 +58,6 @@ func (f *FileInfo) AsPath(filename string) *FileInfo {
 	}
 }
 
-func (f *FileInfo) WithId(fileId uint64) *FileInfo {
-	return &FileInfo{
-		currentName: f.currentName,
-		FullPath:    f.FullPath,
-		FileMtime:   f.FileMtime,
-		FileMode:    f.FileMode,
-		FileId:      fileId,
-		FileSize:    f.FileSize,
-		FileUid:     f.FileUid,
-		FileGid:     f.FileGid,
-		Opener:      f.Opener,
-	}
-}
-
 func (f *FileInfo) Name() string {
 	if f.currentName == "" {
 		return f.FullPath

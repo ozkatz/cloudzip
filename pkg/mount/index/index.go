@@ -1,6 +1,8 @@
 package index
 
 import (
+	"errors"
+	"fmt"
 	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 	"os"
 	"path"
@@ -8,11 +10,15 @@ import (
 	"sync"
 )
 
+var (
+	ErrInvalidInput = errors.New("invalid input")
+)
+
 type Tree interface {
 	// Index accepts a sorted list of paths.
 	// it creates a mapping of directory memberships and makes up for missing directory entries
 	// (some indices have no directory indices at all, so those need to be created)
-	Index(infos []*fs.FileInfo)
+	Index(infos []*fs.FileInfo) error
 
 	// Readdir returns the direct descendants of the given directory at entryPath
 	Readdir(entryPath string) (fs.FileInfoList, error)
@@ -21,7 +27,6 @@ type Tree interface {
 	Stat(entryPath string) (*fs.FileInfo, error)
 }
 
-// helpers
 type DirInfoGenerator func(filename string) *fs.FileInfo
 
 // InMemoryTreeBuilder maintains a tree in memory
@@ -43,7 +48,7 @@ func NewInMemoryTreeBuilder(directoryFn DirInfoGenerator) *InMemoryTreeBuilder {
 	}
 }
 
-func (t *InMemoryTreeBuilder) Index(infos []*fs.FileInfo) {
+func (t *InMemoryTreeBuilder) Index(infos []*fs.FileInfo) error {
 	t.l.Lock()
 	defer t.l.Unlock()
 
@@ -62,22 +67,32 @@ func (t *InMemoryTreeBuilder) Index(infos []*fs.FileInfo) {
 				currentInfo = info
 			}
 
+			explicitDirectory := isLastEntry && currentInfo.IsDir()
+
+			// add to files
+			_, fileRegistered := t.files[part]
+			if explicitDirectory || !fileRegistered {
+				t.files[part] = currentInfo
+			}
+
 			// add to parent directory
 			if i > 0 { // we have a parent
 				parent := parts[i-1]
 				// if not already added to the parent
-				if _, ok := addedToParent[part]; !ok {
+				_, alreadyAdded := addedToParent[part]
+				if alreadyAdded && explicitDirectory {
+					// THIS SHOULDN'T HAPPEN IF SORTED
+					return fmt.Errorf("%w: files should be sorted", ErrInvalidInput)
+				} else if !alreadyAdded {
 					t.dirs[parent] = append(t.dirs[parent], currentInfo)
 					addedToParent[part] = true
 				}
 			}
-			// add to files
-			t.files[part] = currentInfo
-		}
 
+		}
 	}
 	// done!
-	return
+	return nil
 }
 
 func DirParts(p string) []string {
