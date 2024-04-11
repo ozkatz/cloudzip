@@ -1,4 +1,4 @@
-package fs
+package base
 
 import (
 	"crypto/sha1"
@@ -33,16 +33,16 @@ func (c *DirectoryCache) Set(uri ZipFileURI, directory []*zipfile.CDR) {
 }
 
 type FileCacheKey struct {
-	zipfile  ZipFileURI
-	path     string
-	checksum uint32
+	ZipFile  ZipFileURI
+	Path     string
+	Checksum uint32
 }
 
 func (k FileCacheKey) Id() string {
 	keyHash := sha1.New()
-	keyHash.Write([]byte(k.zipfile))
-	keyHash.Write([]byte(k.path))
-	keyHash.Write([]byte(strconv.Itoa(int(k.checksum))))
+	keyHash.Write([]byte(k.ZipFile))
+	keyHash.Write([]byte(k.Path))
+	keyHash.Write([]byte(strconv.Itoa(int(k.Checksum))))
 	hashBytes := keyHash.Sum(nil)
 	return fmt.Sprintf("%x", hashBytes)
 }

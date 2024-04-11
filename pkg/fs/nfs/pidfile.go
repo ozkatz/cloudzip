@@ -1,4 +1,4 @@
-package fs
+package nfs
 
 import (
 	"bytes"
@@ -40,61 +40,61 @@ func (b *billyPidFileStat) Sys() any {
 	return nil
 }
 
-type billyPidFile struct {
+type BillyPidFile struct {
 	name string
 	pid  int
 	r    *bytes.Reader
 	stat *billyPidFileStat
 }
 
-func (b *billyPidFile) WriteAt(p []byte, off int64) (n int, err error) {
+func (b *BillyPidFile) WriteAt(p []byte, off int64) (n int, err error) {
 	return 0, billy.ErrNotSupported
 }
 
-func (b *billyPidFile) Name() string {
+func (b *BillyPidFile) Name() string {
 	return b.name
 }
 
-func (b *billyPidFile) Write(p []byte) (n int, err error) {
+func (b *BillyPidFile) Write(p []byte) (n int, err error) {
 	return 0, billy.ErrReadOnly
 }
 
-func (b *billyPidFile) Read(p []byte) (n int, err error) {
+func (b *BillyPidFile) Read(p []byte) (n int, err error) {
 	return b.r.Read(p)
 }
 
-func (b *billyPidFile) ReadAt(p []byte, off int64) (n int, err error) {
+func (b *BillyPidFile) ReadAt(p []byte, off int64) (n int, err error) {
 	return b.r.ReadAt(p, off)
 }
 
-func (b *billyPidFile) Seek(offset int64, whence int) (int64, error) {
+func (b *BillyPidFile) Seek(offset int64, whence int) (int64, error) {
 	return b.r.Seek(offset, whence)
 }
 
-func (b *billyPidFile) Close() error {
+func (b *BillyPidFile) Close() error {
 	return nil
 }
 
-func (b *billyPidFile) Lock() error {
+func (b *BillyPidFile) Lock() error {
 	return billy.ErrNotSupported
 }
 
-func (b *billyPidFile) Unlock() error {
+func (b *BillyPidFile) Unlock() error {
 	return billy.ErrNotSupported
 }
 
-func (b *billyPidFile) Truncate(size int64) error {
+func (b *BillyPidFile) Truncate(size int64) error {
 	return billy.ErrReadOnly
 }
 
-func (b *billyPidFile) Stat() os.FileInfo {
+func (b *BillyPidFile) Stat() os.FileInfo {
 	return b.stat
 }
 
-func pidFile(name string, pid int, startTime time.Time) *billyPidFile {
+func PidFile(name string, pid int, startTime time.Time) *BillyPidFile {
 	data := []byte(strconv.Itoa(pid))
 
-	return &billyPidFile{
+	return &BillyPidFile{
 		name: name,
 		pid:  pid,
 		r:    bytes.NewReader(data),

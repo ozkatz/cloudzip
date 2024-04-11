@@ -1,4 +1,4 @@
-package fs
+package base
 
 import (
 	"hash/fnv"

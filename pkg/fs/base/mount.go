@@ -1,8 +1,10 @@
-package fs
+package base
 
 import (
 	"errors"
 	"fmt"
+	"github.com/ozkatz/cloudzip/pkg/fs/nfs"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,7 +35,7 @@ func execMountCommand(name string, args ...string) error {
 }
 
 func readPidFile(root string) (int, error) {
-	pidFilePath := filepath.Join(root, PidFilePath)
+	pidFilePath := filepath.Join(root, nfs.PidFilePath)
 	data, err := os.ReadFile(pidFilePath)
 	if os.IsNotExist(err) {
 		return 0, fmt.Errorf("%s: %w", root, ErrNotOurMount)
@@ -104,4 +106,30 @@ func Umount(location string) error {
 		// TODO(ozkatz)
 	}
 	return MountError
+}
+
+// fork crete a new process
+func fork(args []string) (int, io.Reader, error) {
+	cmd := exec.Command(os.Args[0], args...)
+	cmd.Env = os.Environ()
+	cmd.Stdin = nil
+	cmd.Stderr = nil
+	cmd.ExtraFiles = nil
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return 0, nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return 0, nil, err
+	}
+	pid := cmd.Process.Pid
+	// release
+	if err := cmd.Process.Release(); err != nil {
+		return pid, out, err
+	}
+	return pid, out, nil
+}
+
+func Daemonize(cmd ...string) (int, io.Reader, error) {
+	return fork(cmd)
 }

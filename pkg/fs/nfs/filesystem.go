@@ -1,7 +1,8 @@
-package fs
+package nfs
 
 import (
 	"context"
+	"github.com/ozkatz/cloudzip/pkg/fs/base"
 	"os"
 	"path"
 	"sort"
@@ -18,9 +19,9 @@ const (
 )
 
 type ZipFS struct {
-	Remote ZipFileURI
-	Tree   Tree
-	Opener Opener
+	Remote base.ZipFileURI
+	Tree   base.Tree
+	Opener base.Opener
 
 	startTime time.Time
 }
@@ -30,34 +31,31 @@ func NewZipFS(cacheDir, remoteZipURI string) (billy.Filesystem, error) {
 	if err != nil {
 		return nil, err
 	}
-	zip := &adapter{
-		f:   obj,
-		ctx: context.Background(),
-	}
+	zip := base.NewZipStorageAdapter(context.Background(), obj)
 	parser := zipfile.NewCentralDirectoryParser(zip)
 	cdr, err := parser.GetCentralDirectory()
 	if err != nil {
 		return nil, err
 	}
-	remoteUri := ZipFileURI(remoteZipURI)
+	remoteUri := base.ZipFileURI(remoteZipURI)
 	startTime := time.Now()
 
 	// build index
 	infos := make([]os.FileInfo, 0)
 	for _, f := range cdr {
-		infos = append(infos, &ZipFileInfo{
+		infos = append(infos, &base.ZipFileInfo{
 			Remote: remoteUri,
 			Path:   f.FileName,
 			CDR:    f,
 		})
 	}
 	// add pid file
-	infos = append(infos, pidFile(PidFilePath, os.Getpid(), startTime).Stat())
+	infos = append(infos, PidFile(PidFilePath, os.Getpid(), startTime).Stat())
 
 	// sort it
-	sort.Sort(ByName(infos))
-	tree := NewInMemoryTreeBuilder(func(entry string) os.FileInfo {
-		return &IndexFileInfo{
+	sort.Sort(base.ByName(infos))
+	tree := base.NewInMemoryTreeBuilder(func(entry string) os.FileInfo {
+		return &base.IndexFileInfo{
 			SetName:    entry,
 			SetMode:    os.ModeDir | DefaultDirMask,
 			SetModTime: startTime,
@@ -66,7 +64,7 @@ func NewZipFS(cacheDir, remoteZipURI string) (billy.Filesystem, error) {
 	tree.Index(infos)
 
 	// build opener
-	cache := NewFileCache(cacheDir)
+	cache := base.NewFileCache(cacheDir)
 	opener := NewZipOpener(startTime, remoteUri, cdr, cache)
 
 	filesys := &ZipFS{
@@ -95,8 +93,12 @@ func (fs *ZipFS) Stat(filename string) (os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	base := path.Base(filename) // stat should always return the base name?
-	return fileInfoWithName(info, base), nil
+	basename := path.Base(filename) // stat should always return the base name?
+	return fileInfoWithName(info, basename), nil
+}
+
+func fileInfoWithName(info os.FileInfo, name string) os.FileInfo {
+	panic("fixme")
 }
 
 func (fs *ZipFS) Rename(oldpath, newpath string) error {

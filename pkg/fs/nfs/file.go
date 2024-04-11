@@ -1,8 +1,9 @@
-package fs
+package nfs
 
 import (
 	"context"
 	"errors"
+	"github.com/ozkatz/cloudzip/pkg/fs/base"
 	"github.com/ozkatz/cloudzip/pkg/remote"
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
 	"io"
@@ -14,7 +15,7 @@ import (
 )
 
 type ZipFile struct {
-	Remote ZipFileURI
+	Remote base.ZipFileURI
 	Path   string
 
 	f *os.File // always backed by an actual filesystem file
@@ -61,16 +62,16 @@ func (z *ZipFile) Truncate(size int64) error {
 	return billy.ErrReadOnly
 }
 
-var _ Opener = &ZipEntryOpener{}
+var _ base.Opener = &ZipEntryOpener{}
 
 type ZipEntryOpener struct {
 	StartTime time.Time
-	Remote    ZipFileURI
-	Cache     *FileCache
+	Remote    base.ZipFileURI
+	Cache     *base.FileCache
 	CDRs      []*zipfile.CDR
 }
 
-func NewZipOpener(startTime time.Time, remote ZipFileURI, directory []*zipfile.CDR, cache *FileCache) *ZipEntryOpener {
+func NewZipOpener(startTime time.Time, remote base.ZipFileURI, directory []*zipfile.CDR, cache *base.FileCache) *ZipEntryOpener {
 	return &ZipEntryOpener{
 		StartTime: startTime,
 		Remote:    remote,
@@ -88,9 +89,9 @@ func (z *ZipEntryOpener) findCdr(filename string) *zipfile.CDR {
 	return nil
 }
 
-func (z *ZipEntryOpener) Open(filename string) (FileLike, error) {
+func (z *ZipEntryOpener) Open(filename string) (base.FileLike, error) {
 	if path.Clean(filename) == PidFilePath {
-		return pidFile(PidFilePath, os.Getpid(), z.StartTime), nil
+		return PidFile(PidFilePath, os.Getpid(), z.StartTime), nil
 	}
 	cdr := z.findCdr(filename)
 	if cdr == nil {
@@ -98,10 +99,10 @@ func (z *ZipEntryOpener) Open(filename string) (FileLike, error) {
 	}
 
 	filename = path.Clean(filename)
-	cacheKey := FileCacheKey{
-		zipfile:  z.Remote,
-		path:     filename,
-		checksum: cdr.CRC32Uncompressed,
+	cacheKey := base.FileCacheKey{
+		ZipFile:  z.Remote,
+		Path:     filename,
+		Checksum: cdr.CRC32Uncompressed,
 	}
 	f, err := z.Cache.Get(cacheKey)
 	if errors.Is(err, os.ErrNotExist) {
@@ -110,10 +111,9 @@ func (z *ZipEntryOpener) Open(filename string) (FileLike, error) {
 		if err != nil {
 			return nil, err
 		}
-		zip := zipfile.NewCentralDirectoryParser(&adapter{
-			f:   remoteZip,
-			ctx: context.Background(),
-		})
+		ctx := context.Background()
+		fetcher := base.NewZipStorageAdapter(ctx, remoteZip)
+		zip := zipfile.NewCentralDirectoryParser(fetcher)
 		reader, err := zip.Read(filename)
 		if err != nil {
 			return nil, err
@@ -135,9 +135,9 @@ func (z *ZipEntryOpener) Open(filename string) (FileLike, error) {
 	}, nil
 }
 
-func (z *ZipEntryOpener) Can(capability Capability) bool {
+func (z *ZipEntryOpener) Can(capability base.Capability) bool {
 	switch capability {
-	case ReadCapability, SeekCapability:
+	case base.ReadCapability, base.SeekCapability:
 		return true
 	}
 	return false

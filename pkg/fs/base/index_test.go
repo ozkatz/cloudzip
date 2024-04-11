@@ -1,8 +1,7 @@
-package fs_test
+package base_test
 
 import (
 	"encoding/json"
-	"github.com/ozkatz/cloudzip/pkg/fs"
 	"os"
 	"sort"
 	"testing"
@@ -49,7 +48,7 @@ func TestDirParts(t *testing.T) {
 
 	for _, cas := range cases {
 		t.Run(cas.Name, func(t *testing.T) {
-			got := fs.DirParts(cas.Path)
+			got := DirParts(cas.Path)
 			if len(got) != len(cas.Expected) {
 				t.Errorf("expected %d parts, got %d (%s)", len(cas.Expected), len(got), mustJson(t, got))
 				return
@@ -81,15 +80,15 @@ func TestInMemoryTreeBuilder_Readdir(t *testing.T) {
 		"hello/zzz.info",
 	}
 
-	idx := fs.NewInMemoryTreeBuilder(func(s string) os.FileInfo {
-		return &fs.IndexFileInfo{
+	idx := NewInMemoryTreeBuilder(func(s string) os.FileInfo {
+		return &IndexFileInfo{
 			SetName: s,
 			SetMode: os.ModeDir,
 		}
 	})
 	infos := make([]os.FileInfo, len(treeData))
 	for i, p := range treeData {
-		infos[i] = &fs.IndexFileInfo{
+		infos[i] = &IndexFileInfo{
 			SetName:    p,
 			SetSize:    100,
 			SetMode:    os.ModePerm,
@@ -97,7 +96,7 @@ func TestInMemoryTreeBuilder_Readdir(t *testing.T) {
 			SetSys:     nil,
 		}
 	}
-	sort.Sort(fs.ByName(infos))
+	sort.Sort(ByName(infos))
 	idx.Index(infos)
 
 	// root

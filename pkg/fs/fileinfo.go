@@ -2,37 +2,67 @@ package fs
 
 import (
 	"io/fs"
+	"syscall"
 	"time"
-
-	"github.com/ozkatz/cloudzip/pkg/zipfile"
 )
 
-type ZipFileInfo struct {
-	Remote ZipFileURI
-	Path   string
-	CDR    *zipfile.CDR
+const (
+	LinkCount = 1
+)
+
+type FileInfo struct {
+	CurrentName string
+	FullPath    string
+	FileMtime   time.Time
+	FileMode    fs.FileMode
+	FileId      uint64
+	FileSize    int64
+	FileUid     uint32
+	FileGid     uint32
 }
 
-func (z *ZipFileInfo) Name() string {
-	return z.Path
+func (f *FileInfo) AsPath(filename string) *FileInfo {
+	return &FileInfo{
+		CurrentName: filename,
+		FullPath:    f.FullPath,
+		FileMtime:   f.FileMtime,
+		FileMode:    f.FileMode,
+		FileId:      f.FileId,
+		FileSize:    f.FileSize,
+		FileUid:     f.FileUid,
+		FileGid:     f.FileGid,
+	}
 }
 
-func (z *ZipFileInfo) Size() int64 {
-	return int64(z.CDR.UncompressedSizeBytes)
+func (f *FileInfo) Name() string {
+	if f.CurrentName == "" {
+		return f.FullPath
+	}
+	return f.CurrentName
 }
 
-func (z *ZipFileInfo) Mode() fs.FileMode {
-	return z.CDR.Mode
+func (f *FileInfo) Size() int64 {
+	return f.FileSize
 }
 
-func (z *ZipFileInfo) ModTime() time.Time {
-	return z.CDR.Modified
+func (f *FileInfo) Mode() fs.FileMode {
+	return f.FileMode
 }
 
-func (z *ZipFileInfo) IsDir() bool {
-	return z.CDR.Mode.IsDir()
+func (f *FileInfo) ModTime() time.Time {
+	return f.FileMtime
 }
 
-func (z *ZipFileInfo) Sys() any {
-	return nil
+func (f *FileInfo) IsDir() bool {
+	return f.FileMode.IsDir()
+}
+
+func (f *FileInfo) Sys() any {
+	return &syscall.Stat_t{
+		Nlink: LinkCount,
+		Ino:   f.FileId,
+		Uid:   f.FileUid,
+		Gid:   f.FileGid,
+		Size:  f.Size(),
+	}
 }

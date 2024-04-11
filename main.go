@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/ozkatz/cloudzip/pkg/fs/base"
+	"github.com/ozkatz/cloudzip/pkg/fs/nfs"
 	"io"
 	"log/slog"
 	"net"
@@ -13,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ozkatz/cloudzip/pkg/fs"
 	"github.com/ozkatz/cloudzip/pkg/remote"
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
 )
@@ -209,12 +210,12 @@ func mountServer(zipFileURI string) {
 	// we output to stdout to signal back to the caller that this is the selected TCP port to connect to
 	fmt.Printf("%d\n", port)
 
-	handler, err := fs.NewNFSServer(cacheDir, zipFileURI)
+	handler, err := nfs.NewNFSServer(cacheDir, zipFileURI)
 	if err != nil {
 		die("could not start NFS server: %v\n", err)
 	}
 
-	err = fs.Serve(listener, handler)
+	err = nfs.Serve(listener, handler)
 	if err != nil {
 		die("could not serve on %s: %v\n", MountServerBindAddress, err)
 	}
@@ -226,7 +227,7 @@ func mount(remoteFile, targetDirectory string) {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read stdin: %v\n", err))
 		os.Exit(1)
 	}
-	pid, stdout, err := fs.Daemonize("mount-server", uri)
+	pid, stdout, err := base.Daemonize("mount-server", uri)
 	if err != nil {
 		die("could not spawn NFS server: %v\n", err)
 	}
@@ -258,13 +259,13 @@ func mount(remoteFile, targetDirectory string) {
 	}
 
 	// now mount it
-	if err := fs.Mount(serverPort, targetDirectory); err != nil {
+	if err := base.Mount(serverPort, targetDirectory); err != nil {
 		die("could not run mount command: %v\n", err)
 	}
 }
 
 func umount(directory string) {
-	err := fs.Umount(directory)
+	err := base.Umount(directory)
 	if err != nil {
 		die("could not unmount directory '%s': %v\n", directory, err)
 	}
