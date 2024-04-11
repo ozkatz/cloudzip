@@ -1,4 +1,4 @@
-package fs
+package nfs
 
 import (
 	"net"
@@ -17,6 +17,5 @@ func NewNFSServer(cacheDir, zipFileURI string) (nfs.Handler, error) {
 		return nil, err
 	}
 	fsHandler := nfshelper.NewNullAuthHandler(zipFs)
-	//return fsHandler, nil
 	return nfshelper.NewCachingHandler(fsHandler, 1024), nil
 }
