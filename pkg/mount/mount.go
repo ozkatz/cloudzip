@@ -77,7 +77,7 @@ func Mount(port int, location string) error {
 		return tryThenSudo("mount_nfs", "-o", opts, "localhost:/", location)
 	case GOOSLinux:
 		opts := fmt.Sprintf(
-			"user,noacl,nolock,tcp,vers=3,rsize=1048576,port=%d,mountport=%d",
+			"user,noacl,nolock,tcp,vers=3,nconnect=16,rsize=1048576,port=%d,mountport=%d",
 			port, port)
 		return tryThenSudo("mount", "-t", "nfs", "-o", opts, "localhost:/", location)
 	case GOOSWindows:

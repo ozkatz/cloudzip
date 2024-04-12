@@ -4,17 +4,19 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	mount2 "github.com/ozkatz/cloudzip/pkg/mount"
-	"github.com/ozkatz/cloudzip/pkg/mount/nfs"
 	"io"
 	"log/slog"
 	"net"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
+	mnt "github.com/ozkatz/cloudzip/pkg/mount"
+	"github.com/ozkatz/cloudzip/pkg/mount/nfs"
 	"github.com/ozkatz/cloudzip/pkg/remote"
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
 )
@@ -187,6 +189,7 @@ func cat(remoteFile, path string) {
 }
 
 func mountServer(zipFileURI string) {
+	ctx := context.Background()
 	cacheDir := os.Getenv("CLOUDZIP_CACHE_DIR")
 	if cacheDir == "" {
 		cacheDir = filepath.Join(os.TempDir(), "lakefs-mount-cache")
@@ -207,18 +210,24 @@ func mountServer(zipFileURI string) {
 		die("could not listen on %s: %v\n", MountServerBindAddress, err)
 	}
 	port := listener.Addr().(*net.TCPAddr).Port
+
+	tree, err := mnt.BuildZipTree(ctx, cacheDir, zipFileURI)
+	if err != nil {
+		die("could not create filesystem: %v\n", err)
+	}
+
+	done, cancelFn := signal.NotifyContext(ctx, os.Interrupt, syscall.Signal(15)) // SIGTERM
+	defer cancelFn()
+	go func() {
+		err = nfs.Serve(listener, nfs.NewNFSServer(tree))
+		if err != nil {
+			die("could not serve on %s: %v\n", MountServerBindAddress, err)
+		}
+	}()
 	// we output to stdout to signal back to the caller that this is the selected TCP port to connect to
 	fmt.Printf("%d\n", port)
-
-	handler, err := nfs.NewNFSServer(cacheDir, zipFileURI)
-	if err != nil {
-		die("could not start NFS server: %v\n", err)
-	}
-
-	err = nfs.Serve(listener, handler)
-	if err != nil {
-		die("could not serve on %s: %v\n", MountServerBindAddress, err)
-	}
+	<-done.Done()
+	_ = listener.Close()
 }
 
 func mount(remoteFile, targetDirectory string) {
@@ -227,7 +236,7 @@ func mount(remoteFile, targetDirectory string) {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read stdin: %v\n", err))
 		os.Exit(1)
 	}
-	pid, stdout, err := mount2.Daemonize("mount-server", uri)
+	pid, stdout, err := mnt.Daemonize("mount-server", uri)
 	if err != nil {
 		die("could not spawn NFS server: %v\n", err)
 	}
@@ -259,13 +268,13 @@ func mount(remoteFile, targetDirectory string) {
 	}
 
 	// now mount it
-	if err := mount2.Mount(serverPort, targetDirectory); err != nil {
+	if err := mnt.Mount(serverPort, targetDirectory); err != nil {
 		die("could not run mount command: %v\n", err)
 	}
 }
 
 func umount(directory string) {
-	err := mount2.Umount(directory)
+	err := mnt.Umount(directory)
 	if err != nil {
 		die("could not unmount directory '%s': %v\n", directory, err)
 	}

@@ -1,6 +1,7 @@
 package nfs
 
 import (
+	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"net"
 
 	"github.com/willscott/go-nfs"
@@ -11,11 +12,8 @@ func Serve(listener net.Listener, handler nfs.Handler) error {
 	return nfs.Serve(listener, handler)
 }
 
-func NewNFSServer(cacheDir, zipFileURI string) (nfs.Handler, error) {
-	zipFs, err := NewZipFS(cacheDir, zipFileURI)
-	if err != nil {
-		return nil, err
-	}
+func NewNFSServer(tree index.Tree) nfs.Handler {
+	zipFs := NewZipFS(tree)
 	fsHandler := nfshelper.NewNullAuthHandler(zipFs)
-	return nfshelper.NewCachingHandler(fsHandler, 1024), nil
+	return nfshelper.NewCachingHandler(fsHandler, 1024)
 }

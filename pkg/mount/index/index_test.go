@@ -21,22 +21,11 @@ func TestInMemoryTreeBuilder_Readdir(t *testing.T) {
 	}
 
 	idx := index.NewInMemoryTreeBuilder(func(filename string) *fs.FileInfo {
-		return &fs.FileInfo{
-			FullPath:  filename,
-			FileMtime: time.Now(),
-			FileMode:  os.ModeDir | 0755,
-			FileId:    fs.FileIDFromString(filename),
-		}
+		return fs.ImmutableDir(filename, time.Now())
 	})
 	infos := make(fs.FileInfoList, len(treeData))
 	for i, p := range treeData {
-		infos[i] = &fs.FileInfo{
-			FullPath:  p,
-			FileMtime: time.Now(),
-			FileMode:  os.ModePerm,
-			FileId:    fs.FileIDFromString(p),
-			FileSize:  100,
-		}
+		infos[i] = fs.ImmutableInfo(p, time.Now(), os.ModePerm, 100, nil)
 	}
 	sort.Sort(infos)
 	err := idx.Index(infos)

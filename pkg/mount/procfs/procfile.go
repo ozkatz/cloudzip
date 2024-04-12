@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+const (
+	ProcFileMode os.FileMode = 0644
+)
+
 type InMemFile struct {
 	reader *bytes.Reader
 }
@@ -41,16 +45,8 @@ func (f *InMemFile) Size() int64 {
 
 func NewProcFile(path string, content []byte, modTime time.Time) *fs.FileInfo {
 	f := &InMemFile{bytes.NewReader(content)}
-	return &fs.FileInfo{
-		FullPath:  path,
-		FileMtime: modTime,
-		FileMode:  0644,
-		FileId:    fs.FileIDFromString(path),
-		FileSize:  f.Size(),
-		FileUid:   uint32(os.Getuid()),
-		FileGid:   uint32(os.Getgid()),
-		Opener: fs.OpenFn(func(fullPath string, flag int, perm os.FileMode) (fs.FileLike, error) {
-			return f, nil
-		}),
+	opener := func(fullPath string, flag int, perm os.FileMode) (fs.FileLike, error) {
+		return f, nil
 	}
+	return fs.ImmutableInfo(path, modTime, ProcFileMode, f.Size(), fs.OpenFn(opener))
 }

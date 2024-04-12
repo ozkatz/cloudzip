@@ -1,98 +1,19 @@
 package nfs
 
 import (
-	"context"
+	"github.com/go-git/go-billy/v5"
 	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 	"github.com/ozkatz/cloudzip/pkg/mount/index"
-	"github.com/ozkatz/cloudzip/pkg/mount/procfs"
-	"hash/fnv"
 	"os"
 	"path"
-	"sort"
-	"strconv"
-	"time"
-
-	"github.com/go-git/go-billy/v5"
-	"github.com/ozkatz/cloudzip/pkg/remote"
-	"github.com/ozkatz/cloudzip/pkg/zipfile"
-)
-
-const (
-	ProcPidFilePath = ".cz/server.pid"
-	DefaultDirMask  = 0755
 )
 
 type ZipFS struct {
-	Remote string
-	Tree   index.Tree
-
-	startTime time.Time
+	Tree index.Tree
 }
 
-func stringToInt64Hash(str string) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(str))
-	return h.Sum64()
-}
-
-func NewZipFS(cacheDir, remoteZipURI string) (billy.Filesystem, error) {
-	ctx := context.Background()
-	obj, err := remote.Object(remoteZipURI)
-	if err != nil {
-		return nil, err
-	}
-	zip := zipfile.NewStorageAdapter(ctx, obj)
-	parser := zipfile.NewCentralDirectoryParser(zip)
-	cdr, err := parser.GetCentralDirectory()
-	if err != nil {
-		return nil, err
-	}
-	startTime := time.Now()
-
-	// build index
-	infos := make(fs.FileInfoList, 0)
-	cache := fs.NewFileCache(cacheDir)
-	for _, f := range cdr {
-		infos = append(infos, &fs.FileInfo{
-			FullPath:  f.FileName,
-			FileMtime: f.Modified,
-			FileMode:  f.Mode,
-			FileId:    stringToInt64Hash(f.FileName),
-			FileSize:  int64(f.UncompressedSizeBytes),
-			FileUid:   uint32(os.Getuid()),
-			FileGid:   uint32(os.Getgid()),
-			Opener:    getOpenerFor(remoteZipURI, f, cache),
-		})
-	}
-
-	// "proc" filesystem exposed to users
-	infos = append(infos, procfs.NewProcFile(".cz/server.pid", []byte(strconv.Itoa(os.Getpid())), startTime))
-	infos = append(infos, procfs.NewProcFile(".cz/cachedir", []byte(cacheDir), startTime))
-	infos = append(infos, procfs.NewProcFile(".cz/source", []byte(remoteZipURI), startTime))
-
-	// sort it
-	sort.Sort(infos)
-	tree := index.NewInMemoryTreeBuilder(func(entry string) *fs.FileInfo {
-		return &fs.FileInfo{
-			FullPath:  entry,
-			FileMtime: startTime,
-			FileMode:  os.ModeDir | DefaultDirMask,
-			FileId:    stringToInt64Hash(entry),
-			FileSize:  64,
-			FileUid:   uint32(os.Getuid()),
-			FileGid:   uint32(os.Getgid()),
-			Opener:    nil,
-		}
-	})
-	err = tree.Index(infos)
-	if err != nil {
-		return nil, err
-	}
-	return &ZipFS{
-		Remote:    remoteZipURI,
-		Tree:      tree,
-		startTime: startTime,
-	}, nil
+func NewZipFS(tree index.Tree) billy.Filesystem {
+	return &ZipFS{Tree: tree}
 }
 
 func (fs *ZipFS) Create(filename string) (billy.File, error) {
@@ -173,7 +94,7 @@ func (fs *ZipFS) ReadDir(name string) ([]os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return dir.AsOSFiles(), nil
+	return dir.ToOSFiles(), nil
 }
 
 func (fs *ZipFS) MkdirAll(filename string, perm os.FileMode) error {
