@@ -2,7 +2,6 @@ package nfs
 
 import (
 	"github.com/go-git/go-billy/v5"
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"os"
 	"path"
@@ -22,31 +21,6 @@ func (fs *ZipFS) Create(filename string) (billy.File, error) {
 
 func (fs *ZipFS) Open(filename string) (billy.File, error) {
 	return fs.OpenFile(filename, os.O_RDONLY, 0)
-}
-
-type nfsFile struct {
-	fs.FileLike
-	name string
-}
-
-func (n *nfsFile) Name() string {
-	return n.name
-}
-
-func (n *nfsFile) Lock() error {
-	return billy.ErrNotSupported
-}
-
-func (n *nfsFile) Unlock() error {
-	return billy.ErrNotSupported
-}
-
-func (n *nfsFile) Truncate(size int64) error {
-	return billy.ErrNotSupported
-}
-
-func fileLikeToBilly(f fs.FileLike, filename string) billy.File {
-	return &nfsFile{f, filename}
 }
 
 func (fs *ZipFS) OpenFile(filename string, flag int, perm os.FileMode) (billy.File, error) {
@@ -70,7 +44,7 @@ func (fs *ZipFS) Stat(filename string) (os.FileInfo, error) {
 		return nil, err
 	}
 	basename := path.Base(filename) // stat should always return the base name?
-	return info.AsPath(basename), nil
+	return &nfsFileInfo{info.AsPath(basename)}, nil
 }
 
 func (fs *ZipFS) Rename(oldpath, newpath string) error {
@@ -94,7 +68,11 @@ func (fs *ZipFS) ReadDir(name string) ([]os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return dir.ToOSFiles(), nil
+	nfsDir := make([]os.FileInfo, len(dir))
+	for i, e := range dir {
+		nfsDir[i] = &nfsFileInfo{e}
+	}
+	return nfsDir, nil
 }
 
 func (fs *ZipFS) MkdirAll(filename string, perm os.FileMode) error {

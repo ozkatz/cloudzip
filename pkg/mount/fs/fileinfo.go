@@ -4,7 +4,6 @@ import (
 	"hash/fnv"
 	"io/fs"
 	"os"
-	"syscall"
 	"time"
 )
 
@@ -110,12 +109,17 @@ func (f *FileInfo) FileID() uint64 {
 	return f.id
 }
 
+func (f *FileInfo) Uid() uint32 {
+	return f.uid
+}
+
+func (f *FileInfo) Gid() uint32 {
+	return f.gid
+}
+func (f *FileInfo) NLink() uint32 {
+	return LinkCount
+}
+
 func (f *FileInfo) Sys() any {
-	return &syscall.Stat_t{
-		Nlink: LinkCount,
-		Ino:   f.id,
-		Uid:   f.uid,
-		Gid:   f.gid,
-		Size:  f.Size(),
-	}
+	return nil
 }
