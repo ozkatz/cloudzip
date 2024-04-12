@@ -34,6 +34,7 @@ require (
 	github.com/rasky/go-xdr v0.0.0-20170124162913-1a41d1a06c93 // indirect
 	github.com/willscott/go-nfs-client v0.0.0-20240104095149-b44639837b00 // indirect
 	golang.org/x/sys v0.19.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 replace github.com/willscott/go-nfs => github.com/ozkatz/go-nfs v0.0.0-20240412114939-0e20378840bd

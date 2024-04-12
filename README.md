@@ -195,15 +195,11 @@ For example, for the dataset at `https://www.kaggle.com/datasets/datasnaek/youtu
 
 ### lakeFS
 
-Since [lakeFS](https://github.com/treeverse/lakeFS) can return pre-signed URLs which are HTTP(s), we can simply do:
+[lakeFS](https://github.com/treeverse/lakeFS) is fully supported. Will probe the lakeFS server for pre-signed URL support, and if supported will transparently use those. Otherwise, will fetch data through the API.   
 
 ```shell
-lakectl fs presign lakefs://repository/ref/archive.zip | cz ls -
+cz ls lakefs://repository/main/path/to/archive.zip
 ```
-
-> [!WARNING]
-> A note about pre-signed URLs and mounts: Since pre-signed URLs have a relatively short expiration, mounting them could lead to some undefined behavior. Typically, this would require a mechanism to "refresh" them, requesting a new url from the server. This is currently not yet implemented for lakeFS 
-
 
 ### Local files
 

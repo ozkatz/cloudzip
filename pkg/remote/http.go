@@ -2,6 +2,7 @@ package remote
 
 import (
 	"context"
+	"encoding/base64"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,11 @@ import (
 
 type HttpFetcher struct {
 	url string
+}
+
+func basicAuth(username, password string) string {
+	auth := username + ":" + password
+	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
 func NewHttpFetcher(uri string) (*HttpFetcher, error) {

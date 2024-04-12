@@ -19,6 +19,8 @@ func Object(uri string) (Fetcher, error) {
 		return NewHttpFetcher(uri)
 	case "kaggle":
 		return NewKaggleFetcher(uri)
+	case "lakefs":
+		return NewLakeFSFetcher(uri)
 	}
 
 	return nil, fmt.Errorf("%w: unknown scheme: %s", ErrInvalidURI, parsed.Scheme)

@@ -2,7 +2,6 @@ package remote
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -76,11 +75,6 @@ func (k *KaggleFetcher) parseUri() (string, error) {
 		KaggleApiEndpoint,
 		url.QueryEscape(slug),
 		url.QueryEscape(dataset)), nil
-}
-
-func basicAuth(username, password string) string {
-	auth := username + ":" + password
-	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
 func (k *KaggleFetcher) fetchDatasetUrl() (string, error) {

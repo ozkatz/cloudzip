@@ -303,6 +303,7 @@ func ReadCDR(r io.Reader) (*CDR, error) {
 
 	if len(cdr.FileName) > 0 && cdr.FileName[len(cdr.FileName)-1] == '/' {
 		mode |= fs.ModeDir
+		cdr.FileName = cdr.FileName[:len(cdr.FileName)-1] // remove trailing slashes
 	}
 	cdr.Mode = mode
 	return cdr, nil
