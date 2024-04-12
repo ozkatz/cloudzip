@@ -81,8 +81,15 @@ func expandStdin(arg string) (string, error) {
 }
 
 func die(fstring string, args ...interface{}) {
+	if !strings.HasSuffix(fstring, "\n") {
+		fstring += "\n"
+	}
 	_, _ = os.Stderr.WriteString(fmt.Sprintf(fstring, args...))
 	os.Exit(1)
+}
+
+func emitAndDie(fstring string, args ...interface{}) {
+	die("ERROR="+fstring, args...)
 }
 
 func helpNoFail() {
@@ -196,12 +203,12 @@ func mountServer(zipFileURI string) {
 	}
 	dirExists, err := isDir(cacheDir)
 	if err != nil {
-		die("could not check if cache directory '%s' exists: %v\n", cacheDir, err)
+		emitAndDie("could not check if cache directory '%s' exists: %v\n", cacheDir, err)
 	}
 	if !dirExists {
 		err := os.MkdirAll(cacheDir, 0755)
 		if err != nil {
-			die("could not create local cache directory: %v\n", err)
+			emitAndDie("could not create local cache directory: %v\n", err)
 		}
 	}
 
@@ -213,19 +220,19 @@ func mountServer(zipFileURI string) {
 
 	tree, err := mnt.BuildZipTree(ctx, cacheDir, zipFileURI)
 	if err != nil {
-		die("could not create filesystem: %v\n", err)
+		emitAndDie("could not create filesystem: %v\n", err)
 	}
 
 	done, cancelFn := signal.NotifyContext(ctx, os.Interrupt, syscall.Signal(15)) // SIGTERM
 	defer cancelFn()
 	go func() {
-		err = nfs.Serve(listener, nfs.NewNFSServer(tree))
+		err = nfs.Serve(listener, nfs.NewNFSServer(tree, nil))
 		if err != nil {
-			die("could not serve on %s: %v\n", MountServerBindAddress, err)
+			emitAndDie("could not serve o n %s: %v\n", MountServerBindAddress, err)
 		}
 	}()
 	// we output to stdout to signal back to the caller that this is the selected TCP port to connect to
-	fmt.Printf("%d\n", port)
+	fmt.Printf("PORT=%d\n", port)
 	<-done.Done()
 	_ = listener.Close()
 }
@@ -244,11 +251,17 @@ func mount(remoteFile, targetDirectory string) {
 	var serverPort int
 	for scanner.Scan() {
 		received := scanner.Text()
-		serverPort, err = strconv.Atoi(received)
-		if err != nil {
-			die("could not parse port from NFS server: %v", err)
+		if strings.HasPrefix(received, "PORT=") {
+			received = strings.TrimPrefix(received, "PORT=")
+			serverPort, err = strconv.Atoi(received)
+			if err != nil {
+				die("could not parse port from NFS server: %v\n", err)
+			}
+			break // we only care about first line
+		} else if strings.HasPrefix(received, "ERROR=") {
+			errMessage := strings.TrimPrefix(received, "ERROR=")
+			die("could not start mount server: %s\n", errMessage)
 		}
-		break // we only care about first line
 	}
 	if err := scanner.Err(); err != nil {
 		die("could not get back port from NFS server: %v", err)

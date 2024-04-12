@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"github.com/ozkatz/cloudzip/pkg/mount/procfs"
@@ -53,6 +54,29 @@ func getOpenerFor(zipPath string, record *zipfile.CDR, cache *fs.FileCache) fs.O
 		// cache hit!
 		return f, err
 	}
+}
+
+func BuildSillyTree(ctx context.Context, cacheDir, remoteZipURI string) (index.Tree, error) {
+	startTime := time.Now()
+
+	// build index
+	infos := make(fs.FileInfoList, 0)
+
+	// "proc" filesystem exposed to users
+	infos = append(infos, procfs.NewProcFile(".cz/server.pid", []byte(strconv.Itoa(os.Getpid())), startTime))
+	infos = append(infos, procfs.NewProcFile(".cz/start-time", []byte(startTime.Format(time.RFC3339)), startTime))
+	infos = append(infos, procfs.NewProcFile(".cz/page-size", []byte(fmt.Sprintf("%d", os.Getpagesize())), startTime))
+
+	// sort it
+	sort.Sort(infos)
+	tree := index.NewInMemoryTreeBuilder(func(entry string) *fs.FileInfo {
+		return fs.ImmutableDir(entry, startTime)
+	})
+	err := tree.Index(infos)
+	if err != nil {
+		return nil, err
+	}
+	return tree, nil
 }
 
 func BuildZipTree(ctx context.Context, cacheDir, remoteZipURI string) (index.Tree, error) {
