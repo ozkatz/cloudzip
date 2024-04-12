@@ -26,51 +26,33 @@ cp cz /usr/local/bin/
 Listing the contents of a zip file without downloading it:
 
 ```shell
-cz ls "s3://example-bucket/path/to/archive.zip"
+cz ls s3://example-bucket/path/to/archive.zip
+```
+
+Printing a summary of the contents (number of files, total size compressed/uncompressed):
+
+```shell
+cz info s3://example-bucket/path/to/archive.zip
 ```
 
 Downloading and extracting a specific object from within a zip file:
 
 ```shell
-cz cat "s3://example-bucket/path/to/archive.zip" "images/cat.png" > cat.png
+cz cat s3://example-bucket/path/to/archive.zip images/cat.png > cat.png
 ```
 
-### ⚠️ Experimental: Mounting
-
-Instead of listing and downloading individual files from the remote zip, you can now mount it to a local directory.
+Mounting (See below):
 
 ```shell
-cz mount "s3://example-bucket/path/to/archive.zip" "my_dir/"
+cz mount s3://example-bucket/path/to/archive.zip some_dir/
 ```
 
-This would show up on your local filesystem as a directory with the contents of the zip archive inside it - as if you've downloaded and extracted it.
+Unmounting:
 
-However... behind the scenes, it would fetch only the file listing from the remote zip (just like `cz ls`) and spin up a small NFS server, listening on localhost, and mount it to `my_dir/`.
-
-When reading files from `my_dir/`, they will be downloaded and decompressed on-the-fly, just like `cz cat` does.
-
-Files are downloaded into a cache dir, which if not explicitly set, will be purged when unmounted.
-To set it to a specific location (and retain it across mount/umount cycles), set the `CLOUDZIP_CACHE_DIR` environment variable:
 
 ```shell
-export CLOUDZIP_CACHE_DIR="/nvme/fast/cache"
-cz mount "s3://example-bucket/path/to/archive.zip" "my_dir/"
+cz umount some_dir
 ```
-
-To unmount:
-
-```shell
-cz umount "my_dir/"
-```
-
-which will unmount the NFS share from the directory, and terminate the local NFS server for you.
-
-#### Mounting, illustrated:
-
-<img src="docs/mounts.png"/>
-
-> [!CAUTION]
-> This is still experimental (and only supported on Linux and MacOS for now)
 
 
 ## Why does `cz` exist?
@@ -120,6 +102,52 @@ Reading a file from the remote zip involves another HTTP range request: once we 
 
 Because zip files store each file (whether compressed or not) independently, this is enough to uncompress and write the file to `stdout`.
 
+#### ⚠️ Experimental: `cz mount`
+
+Instead of listing and downloading individual files from the remote zip, you can now mount it to a local directory.
+
+```shell
+cz mount s3://example-bucket/path/to/archive.zip my_dir/
+```
+
+This would show up on your local filesystem as a directory with the contents of the zip archive inside it - as if you've downloaded and extracted it.
+
+However... behind the scenes, it would fetch only the file listing from the remote zip (just like `cz ls`) and spin up a small NFS server, listening on localhost, and mount it to `my_dir/`.
+
+When reading files from `my_dir/`, they will first be downloaded and decompressed on-the-fly, just like `cz cat` does.
+
+These files are downloaded into a cache dir, which if not explicitly set, will be purged when unmounted.
+To set it to a specific location (and retain it across mount/umount cycles), set the `CLOUDZIP_CACHE_DIR` environment variable:
+
+```shell
+export CLOUDZIP_CACHE_DIR="/nvme/fast/cache"
+cz mount s3://example-bucket/path/to/archive.zip my_dir/
+```
+
+To unmount:
+
+```shell
+cz umount my_dir
+```
+
+which will unmount the NFS share from the directory, and terminate the local NFS server for you.
+
+#### Mounting, illustrated:
+
+<img src="docs/mounts.png"/>
+
+#### Demo
+
+Mounting a 32GB dataset, directly from Kaggle's storage (See Kaggle usage below) as a local directory,
+with DuckDB reading a single file with ~1 second load time:
+
+<img src="docs/mount_demo.gif"/>
+
+> [!CAUTION]
+> This is still experimental (and only supported on Linux and MacOS for now)
+
+
+
 ## Logging
 
 Set the `$CLOUDZIP_LOGGING` environment variable to `DEBUG` to log storage calls to stderr: 
@@ -131,7 +159,7 @@ cz ls s3://example-bucket/path/to/archive.zip  # will log S3 calls to stderr
 
 ## Supported backends
 
-### [AWS S3](https://aws.amazon.com/s3/)
+### AWS S3
 
 Will use the default [ AWS credentials resolution order](https://docs.aws.amazon.com/sdk-for-go/v1/developer-guide/configuring-sdk.html#specifying-credentials)
 
@@ -149,13 +177,33 @@ Example:
 cz ls https://example.com/path/to/archive.zip
 ```
 
-### [lakeFS](https://github.com/treeverse/lakeFS)
+### Kaggle
 
-Since lakeFS can return pre-signed URLs which are HTTP(s), we can simply do:
+Kaggle's [Dataset Download API](https://github.com/Kaggle/kaggle-api/blob/db7f8d24871b999f48e9b5a42104dc3364259193/src/KaggleSwagger.yaml#L502) returns an URL for a zip file, so we can use it easily with `cz`!
+Before getting started, generate an API key and store the json file in `~/.kaggle/kaggle.json` (see ["Authentication"](https://www.kaggle.com/docs/api#authentication) on the Kaggle API docs).
+
+Alternatively, you can store the `kaggle.json` in a different location and set the `KAGGLE_KEY_FILE` environment variable with its path. 
+
+Example:
+
+```shell
+cz ls kaggle://{userSlug}/{datasetSlug}
+```
+
+For example, for the dataset at `https://www.kaggle.com/datasets/datasnaek/youtube-new`, the `cz` url should be `kaggle://datasnaek/youtube-new`.
+
+
+### lakeFS
+
+Since [lakeFS](https://github.com/treeverse/lakeFS) can return pre-signed URLs which are HTTP(s), we can simply do:
 
 ```shell
 lakectl fs presign lakefs://repository/ref/archive.zip | cz ls -
 ```
+
+> [!WARNING]
+> A note about pre-signed URLs and mounts: Since pre-signed URLs have a relatively short expiration, mounting them could lead to some undefined behavior. Typically, this would require a mechanism to "refresh" them, requesting a new url from the server. This is currently not yet implemented for lakeFS 
+
 
 ### Local files
 
@@ -167,4 +215,3 @@ Example:
 cz ls file://archive.zip  # relative to current directory (./archive.zip)
 cz ls file:///home/user/archive.zip  # absolute path (/home/user/archive.zip)
 ```
-

@@ -36,6 +36,16 @@ Example:
 	cz ls s3://example-bucket/path/to/object.zip
 
 
+cz info:
+Usage: cz info <remote zip file URI>
+
+Show aggregate information about the remote zip file (total bytes, total files, etc)
+
+Example:
+
+	cz info s3://example-bucket/path/to/object.zip
+
+
 cz cat:
 Usage: cz cat <remote zip file URI> <file path>
 
@@ -139,7 +149,7 @@ func (a *adapter) Fetch(start, end *int64) (io.Reader, error) {
 	return a.f.Fetch(a.ctx, start, end)
 }
 
-func ls(remoteFile string) {
+func getCdr(remoteFile string) []*zipfile.CDR {
 	zipfilePath, err := expandStdin(remoteFile)
 	if err != nil {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read stdin: %v\n", err))
@@ -161,7 +171,43 @@ func ls(remoteFile string) {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not read zip file contents: %v\n", err))
 		os.Exit(1)
 	}
-	for _, f := range files {
+	return files
+}
+
+func byteCountIEC(b uint64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB",
+		float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func info(remoteFile string) {
+	var totalCompressed, totalUncompressed, totalFiles uint64
+	for _, f := range getCdr(remoteFile) {
+		if f.Mode.IsDir() {
+			continue
+		}
+		totalCompressed += f.CompressedSizeBytes
+		totalUncompressed += f.UncompressedSizeBytes
+		totalFiles += 1
+	}
+	fmt.Printf("zip file: %s\n", remoteFile)
+	fmt.Printf("files: %d\n", totalFiles)
+	fmt.Printf("total bytes (compressed): %d\n", totalCompressed)
+	fmt.Printf("total bytes (uncompressed): %d\n", totalUncompressed)
+	fmt.Printf("total bytes (compressed, human readable): %s\n", byteCountIEC(totalCompressed))
+	fmt.Printf("total bytes (uncompressed, human readable): %s\n", byteCountIEC(totalUncompressed))
+}
+
+func ls(remoteFile string) {
+	for _, f := range getCdr(remoteFile) {
 		fmt.Printf("%s\t%-12d\t%-12d\t%s\t%s\n",
 			f.Mode, f.CompressedSizeBytes, f.UncompressedSizeBytes, f.Modified.Format(time.RFC822Z), f.FileName)
 	}
@@ -305,6 +351,9 @@ func main() {
 	case "ls":
 		assertArgCount(args, 3)
 		ls(args[2])
+	case "info":
+		assertArgCount(args, 3)
+		info(args[2])
 	case "cat":
 		assertArgCount(args, 4)
 		cat(args[2], args[3])
