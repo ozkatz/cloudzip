@@ -79,7 +79,7 @@ func BuildSillyTree(ctx context.Context, cacheDir, remoteZipURI string) (index.T
 	return tree, nil
 }
 
-func BuildZipTree(ctx context.Context, cacheDir, remoteZipURI string) (index.Tree, error) {
+func BuildZipTree(ctx context.Context, cacheDir, remoteZipURI string, procAttrs map[string]interface{}) (index.Tree, error) {
 	obj, err := remote.Object(remoteZipURI)
 	if err != nil {
 		return nil, err
@@ -109,7 +109,11 @@ func BuildZipTree(ctx context.Context, cacheDir, remoteZipURI string) (index.Tre
 	infos = append(infos, procfs.NewProcFile(".cz/server.pid", []byte(strconv.Itoa(os.Getpid())), startTime))
 	infos = append(infos, procfs.NewProcFile(".cz/cachedir", []byte(cacheDir), startTime))
 	infos = append(infos, procfs.NewProcFile(".cz/source", []byte(remoteZipURI), startTime))
-
+	for k, v := range procAttrs {
+		infos = append(infos, procfs.NewProcFile(fmt.Sprintf(".cz/%s", k),
+			[]byte(fmt.Sprintf("%s", v)),
+			startTime))
+	}
 	// sort it
 	sort.Sort(infos)
 	tree := index.NewInMemoryTreeBuilder(func(entry string) *fs.FileInfo {

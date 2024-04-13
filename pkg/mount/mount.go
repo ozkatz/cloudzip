@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,8 +20,8 @@ const (
 )
 
 var (
-	CommandError   = errors.New("mount command failed")
-	ErrNotOurMount = errors.New("this mount is not managed by cz")
+	ErrCommandError = errors.New("mount command failed")
+	ErrNotOurMount  = errors.New("this mount is not managed by cz")
 )
 
 func execMountCommand(name string, args ...string) error {
@@ -28,7 +29,7 @@ func execMountCommand(name string, args ...string) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		cmdText := fmt.Sprintf("%s %s", name, strings.Join(args, " "))
-		return fmt.Errorf("%w: \"%s\":\n%s\n%s", CommandError, cmdText, out, err)
+		return fmt.Errorf("%w: \"%s\":\n%s\n%s", ErrCommandError, cmdText, out, err)
 	}
 	return nil
 }
@@ -42,7 +43,7 @@ func readPidFile(filepath string) (int, error) {
 	}
 	pid, err := strconv.Atoi(string(data))
 	if err != nil {
-		return 0, fmt.Errorf("%w: could not read mount server pid file", CommandError)
+		return 0, fmt.Errorf("%w: could not read mount server pid file", ErrCommandError)
 	}
 	return pid, nil
 }
@@ -52,7 +53,7 @@ func killPid(pid int) error {
 	if err != nil {
 		return err
 	}
-	return proc.Kill()
+	return proc.Signal(os.Interrupt)
 }
 
 func tryThenSudo(cmd string, args ...string) error {
@@ -69,22 +70,25 @@ func tryThenSudo(cmd string, args ...string) error {
 	return nil // sudo was successful!
 }
 
-func Mount(port int, location string) error {
+func Mount(addr string, location string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("%w: could not parse address: %s", ErrCommandError, addr)
+	}
 	switch runtime.GOOS {
 	case GOOSMacOS:
-		opts := fmt.Sprintf("nolocks,vers=3,tcp,rsize=1048576,actimeo=120,port=%d,mountport=%d",
+		opts := fmt.Sprintf("nolocks,vers=3,tcp,rsize=1048576,actimeo=120,port=%s,mountport=%s",
 			port, port)
-		return tryThenSudo("mount_nfs", "-o", opts, "localhost:/", location)
+		return tryThenSudo("mount_nfs", "-o", opts, fmt.Sprintf("%s:/", host), location)
 	case GOOSLinux:
 		opts := fmt.Sprintf(
-			"user,noacl,nolock,tcp,vers=3,nconnect=16,rsize=1048576,port=%d,mountport=%d",
+			"user,noacl,nolock,tcp,vers=3,nconnect=8,rsize=1048576,port=%s,mountport=%s",
 			port, port)
-		return tryThenSudo("mount", "-t", "nfs", "-o", opts, "localhost:/", location)
+		return tryThenSudo("mount", "-t", "nfs", "-o", opts, fmt.Sprintf("%s:/", host), location)
 	case GOOSWindows:
 		// TODO(ozkatz)
 	}
-
-	return CommandError
+	return fmt.Errorf("%w: don't know how to mount on OS: %s", ErrCommandError, runtime.GOOS)
 }
 
 func Umount(location string) error {
@@ -103,7 +107,7 @@ func Umount(location string) error {
 	case GOOSWindows:
 		// TODO(ozkatz)
 	}
-	return CommandError
+	return fmt.Errorf("%w: don't know how to unmount on OS: %s", ErrCommandError, runtime.GOOS)
 }
 
 // fork crete a new process

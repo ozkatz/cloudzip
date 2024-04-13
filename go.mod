@@ -8,8 +8,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.16.13
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.53.0
 	github.com/go-git/go-billy/v5 v5.5.0
+	github.com/google/uuid v1.6.0
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/spf13/cobra v1.8.0
 	github.com/willscott/go-nfs v0.0.3-0.20240212182854-578b7358fc13
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -28,13 +31,13 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.23.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.5 // indirect
 	github.com/aws/smithy-go v1.20.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/rasky/go-xdr v0.0.0-20170124162913-1a41d1a06c93 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/willscott/go-nfs-client v0.0.0-20240104095149-b44639837b00 // indirect
 	golang.org/x/sys v0.19.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/willscott/go-nfs => github.com/ozkatz/go-nfs v0.0.0-20240412114939-0e20378840bd
+replace github.com/willscott/go-nfs => github.com/ozkatz/go-nfs v0.0.0-20240413142832-29e3699a267b

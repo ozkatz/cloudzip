@@ -1,6 +1,7 @@
 package nfs
 
 import (
+	"context"
 	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"net"
 
@@ -8,8 +9,12 @@ import (
 	nfshelper "github.com/willscott/go-nfs/helpers"
 )
 
-func Serve(listener net.Listener, handler nfs.Handler) error {
-	return nfs.Serve(listener, handler)
+func Serve(ctx context.Context, listener net.Listener, handler nfs.Handler) error {
+	server := &nfs.Server{
+		Handler: handler,
+		Context: ctx,
+	}
+	return server.Serve(listener)
 }
 
 type NFSOptions struct {
@@ -20,7 +25,7 @@ const defaultHandleCacheSize = 1000000
 
 var NFSDefaultOptions = &NFSOptions{HandleCacheSize: defaultHandleCacheSize}
 
-func NewNFSServer(tree index.Tree, opts *NFSOptions) nfs.Handler {
+func NewNFSHandler(tree index.Tree, opts *NFSOptions) nfs.Handler {
 	zipFs := NewZipFS(tree)
 	if opts == nil {
 		opts = NFSDefaultOptions

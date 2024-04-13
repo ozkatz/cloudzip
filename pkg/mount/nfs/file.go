@@ -10,7 +10,7 @@ type nfsFileInfo struct {
 	*fs.FileInfo
 }
 
-func (f *nfsFileInfo) GetFileInfo() *file.FileInfo {
+func (f *nfsFileInfo) Sys() any {
 	return &file.FileInfo{
 		Nlink:  f.NLink(),
 		UID:    f.Uid(),
