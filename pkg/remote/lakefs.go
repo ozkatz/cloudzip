@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/mitchellh/go-homedir"
-	"gopkg.in/yaml.v3"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +14,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mitchellh/go-homedir"
+	"gopkg.in/yaml.v3"
 )
 
 const (

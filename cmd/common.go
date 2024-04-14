@@ -32,10 +32,6 @@ func die(fstring string, args ...interface{}) {
 	os.Exit(1)
 }
 
-func emitAndDie(fstring string, args ...interface{}) {
-	die("ERROR="+fstring, args...)
-}
-
 func setupLogging() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		AddSource: true,
@@ -59,15 +55,6 @@ func isDir(path string) (bool, error) {
 	return stat.IsDir(), nil
 }
 
-type adapter struct {
-	f   remote.Fetcher
-	ctx context.Context
-}
-
-func (a *adapter) Fetch(start, end *int64) (io.Reader, error) {
-	return a.f.Fetch(a.ctx, start, end)
-}
-
 func getCdr(remoteFile string) []*zipfile.CDR {
 	zipfilePath, err := expandStdin(remoteFile)
 	if err != nil {
@@ -80,7 +67,7 @@ func getCdr(remoteFile string) []*zipfile.CDR {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open remote zip file: %v\n", err))
 		os.Exit(1)
 	}
-	zip := zipfile.NewCentralDirectoryParser(&adapter{
+	zip := zipfile.NewCentralDirectoryParser(zipfile.NewStorageAdapter(ctx, f))
 		f:   obj,
 		ctx: ctx,
 	})

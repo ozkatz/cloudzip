@@ -2,9 +2,10 @@ package procfs
 
 import (
 	"bytes"
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 	"os"
 	"time"
+
+	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 )
 
 const (

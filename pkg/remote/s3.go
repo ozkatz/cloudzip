@@ -3,7 +3,9 @@ package remote
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -12,8 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"io"
-	"net/url"
 )
 
 type S3Getter interface {

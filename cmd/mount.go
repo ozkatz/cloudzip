@@ -3,13 +3,55 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	mnt "github.com/ozkatz/cloudzip/pkg/mount"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/ozkatz/cloudzip/pkg/mount"
 )
+
+type nfsServerCallbackStatus string
+
+const (
+	nfsServerCallbackStatusSuccess nfsServerCallbackStatus = "SUCCESS"
+	nfsServerCallbackStatusError   nfsServerCallbackStatus = "ERROR"
+)
+
+type nfsServerCallback struct {
+	Status  nfsServerCallbackStatus
+	Message string
+}
+
+func getNFSServerCallback(callbackListener net.Listener) chan nfsServerCallback {
+	statusUpdates := make(chan nfsServerCallback)
+	go func() {
+		conn, err := callbackListener.Accept()
+		if err != nil {
+			die("could not receive communications from mount server")
+		}
+		var zeroTime time.Time
+		err = conn.SetReadDeadline(zeroTime)
+		if err != nil {
+			die("could not receive communications from mount server")
+		}
+
+		received, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil {
+			die("could not get back status from NFS server: %v (received = '%s')", err, received)
+		}
+		received = strings.TrimSuffix(received, "\n")
+		parts := strings.SplitN(received, "=", 2)
+		msg := nfsServerCallback{nfsServerCallbackStatus(parts[0]), parts[1]}
+		statusUpdates <- msg
+		close(statusUpdates)
+		_ = conn.Close()
+	}()
+	return statusUpdates
+}
 
 var mountCmd = &cobra.Command{
 	Use:     "mount",
@@ -47,25 +89,25 @@ var mountCmd = &cobra.Command{
 
 		var serverAddr string
 		if !noSpawn {
-			pid, stdout, err := mnt.Daemonize(serverCmd...)
+			callbackListener, err := net.Listen("tcp4", "127.0.0.1:0")
 			if err != nil {
 				die("could not spawn NFS server: %v\n", err)
 			}
-			scanner := bufio.NewScanner(stdout)
-			for scanner.Scan() {
-				received := scanner.Text()
-				if strings.HasPrefix(received, "LISTEN=") {
-					received = strings.TrimPrefix(received, "LISTEN=")
-					serverAddr = strings.Trim(received, "\r\n")
-					break // we only care about first line
-				} else if strings.HasPrefix(received, "ERROR=") {
-					errMessage := strings.TrimPrefix(received, "ERROR=")
-					die("could not start mount server: %s\n", errMessage)
-				}
+			callbackAddr := callbackListener.Addr().String()
+			serverCmd = append(serverCmd, "--callback-addr", callbackAddr)
+			serverStatus := getNFSServerCallback(callbackListener)
+			pid, err := mount.Daemonize(serverCmd...)
+			if err != nil {
+				die("could not spawn NFS server: %v\n", err)
 			}
-			if err := scanner.Err(); err != nil {
-				die("could not get back port from NFS server: %v", err)
+			callback := <-serverStatus
+			switch callback.Status {
+			case nfsServerCallbackStatusSuccess:
+				serverAddr = callback.Message
+			case nfsServerCallbackStatusError:
+				die("NFS server initialization error:\n%s\n", callback.Message)
 			}
+			_ = callbackListener.Close()
 			slog.Info("NFS server started", "pid", pid, "listen_addr", serverAddr)
 		} else {
 			serverAddr = listenAddr
@@ -84,7 +126,7 @@ var mountCmd = &cobra.Command{
 		}
 
 		// now mount it
-		if err := mnt.Mount(serverAddr, targetDirectory); err != nil {
+		if err := mount.Mount(serverAddr, targetDirectory); err != nil {
 			die("could not run mount command: %v\n", err)
 		}
 	},

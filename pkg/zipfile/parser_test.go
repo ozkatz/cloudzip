@@ -3,12 +3,12 @@ package zipfile_test
 import (
 	"bytes"
 	"context"
-	"github.com/ozkatz/cloudzip/pkg/remote"
 	"hash/crc32"
 	"io"
 	"os"
 	"testing"
 
+	"github.com/ozkatz/cloudzip/pkg/remote"
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
 )
 

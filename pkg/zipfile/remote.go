@@ -2,8 +2,9 @@ package zipfile
 
 import (
 	"context"
-	"github.com/ozkatz/cloudzip/pkg/remote"
 	"io"
+
+	"github.com/ozkatz/cloudzip/pkg/remote"
 )
 
 type StorageAdapter struct {

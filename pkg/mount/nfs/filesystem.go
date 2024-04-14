@@ -1,10 +1,12 @@
 package nfs
 
 import (
-	"github.com/go-git/go-billy/v5"
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"os"
 	"path"
+
+	"github.com/go-git/go-billy/v5"
+
+	"github.com/ozkatz/cloudzip/pkg/mount/index"
 )
 
 type ZipFS struct {

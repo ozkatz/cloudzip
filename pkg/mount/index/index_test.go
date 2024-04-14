@@ -1,12 +1,13 @@
 package index_test
 
 import (
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"os"
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/ozkatz/cloudzip/pkg/mount/fs"
+	"github.com/ozkatz/cloudzip/pkg/mount/index"
 )
 
 func TestInMemoryTreeBuilder_Readdir(t *testing.T) {

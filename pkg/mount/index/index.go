@@ -3,11 +3,12 @@ package index
 import (
 	"errors"
 	"fmt"
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 	"os"
 	"path"
 	"strings"
 	"sync"
+
+	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 )
 
 var (

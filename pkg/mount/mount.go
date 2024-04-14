@@ -3,7 +3,6 @@ package mount
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -111,27 +110,22 @@ func Umount(location string) error {
 }
 
 // fork crete a new process
-func fork(args []string) (int, io.Reader, error) {
+func fork(args []string) (int, error) {
 	cmd := exec.Command(os.Args[0], args...)
 	cmd.Env = os.Environ()
-	cmd.Stdin = nil
-	cmd.Stderr = nil
-	cmd.ExtraFiles = nil
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return 0, nil, err
-	}
 	if err := cmd.Start(); err != nil {
-		return 0, nil, err
+		return 0, err
 	}
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
 	pid := cmd.Process.Pid
 	// release
 	if err := cmd.Process.Release(); err != nil {
-		return pid, out, err
+		return pid, err
 	}
-	return pid, out, nil
+	return pid, nil
 }
 
-func Daemonize(cmd ...string) (int, io.Reader, error) {
+func Daemonize(cmd ...string) (int, error) {
 	return fork(cmd)
 }

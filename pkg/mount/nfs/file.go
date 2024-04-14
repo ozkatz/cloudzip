@@ -2,8 +2,9 @@ package nfs
 
 import (
 	"github.com/go-git/go-billy/v5"
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 	"github.com/willscott/go-nfs/file"
+
+	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 )
 
 type nfsFileInfo struct {

@@ -2,11 +2,12 @@ package nfs
 
 import (
 	"context"
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"net"
 
 	"github.com/willscott/go-nfs"
 	nfshelper "github.com/willscott/go-nfs/helpers"
+
+	"github.com/ozkatz/cloudzip/pkg/mount/index"
 )
 
 func Serve(ctx context.Context, listener net.Listener, handler nfs.Handler) error {
@@ -23,12 +24,12 @@ type NFSOptions struct {
 
 const defaultHandleCacheSize = 1000000
 
-var NFSDefaultOptions = &NFSOptions{HandleCacheSize: defaultHandleCacheSize}
+var DefaultOptions = &NFSOptions{HandleCacheSize: defaultHandleCacheSize}
 
-func NewNFSHandler(tree index.Tree, opts *NFSOptions) nfs.Handler {
+func NewHandler(tree index.Tree, opts *NFSOptions) nfs.Handler {
 	zipFs := NewZipFS(tree)
 	if opts == nil {
-		opts = NFSDefaultOptions
+		opts = DefaultOptions
 	}
 	fsHandler := nfshelper.NewNullAuthHandler(zipFs)
 	return nfshelper.NewCachingHandler(fsHandler, opts.HandleCacheSize)

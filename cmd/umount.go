@@ -1,8 +1,9 @@
 package cmd
 
 import (
-	mnt "github.com/ozkatz/cloudzip/pkg/mount"
 	"github.com/spf13/cobra"
+
+	"github.com/ozkatz/cloudzip/pkg/mount"
 )
 
 var umountCmd = &cobra.Command{
@@ -13,7 +14,7 @@ var umountCmd = &cobra.Command{
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		directory := args[0]
-		err := mnt.Umount(directory)
+		err := mount.Umount(directory)
 		if err != nil {
 			die("could not unmount directory '%s': %v\n", directory, err)
 		}

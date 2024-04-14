@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/ozkatz/cloudzip/pkg/remote"
 	"io"
 	"testing"
+
+	"github.com/ozkatz/cloudzip/pkg/remote"
 )
 
 func int64p(n int64) *int64 {
