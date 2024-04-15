@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/ozkatz/cloudzip/pkg/mount/dav"
 	"io"
 	"log/slog"
 	"net"
@@ -24,7 +25,7 @@ func dieWithCallback(toAddr, fstring string, args ...interface{}) {
 	errMessage := fmt.Sprintf(fstring, args...)
 	var err error
 	if toAddr != "" {
-		err = sendCallback(toAddr, nfsServerCallbackStatusError, errMessage)
+		err = sendCallback(toAddr, mountServerStatusError, errMessage)
 	}
 	if err != nil {
 		errMessage += fmt.Sprintf(" (could not notify callback address %s: %v)", toAddr, err)
@@ -32,7 +33,7 @@ func dieWithCallback(toAddr, fstring string, args ...interface{}) {
 	die(errMessage)
 }
 
-func sendCallback(toAddr string, className nfsServerCallbackStatus, msg string) error {
+func sendCallback(toAddr string, className mountServerStatus, msg string) error {
 	conn, err := net.Dial("tcp4", toAddr)
 	if err != nil {
 		return err
@@ -47,7 +48,10 @@ func sendCallback(toAddr string, className nfsServerCallbackStatus, msg string) 
 func serverLogging(logFile string) (*slog.Logger, error) {
 	writer := io.Discard
 	var err error
-	if logFile != "" {
+	switch logFile {
+	case "":
+		writer = os.Stdout
+	default:
 		writer, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0755)
 		if err != nil {
 			return nil, err
@@ -84,6 +88,27 @@ var mountServerCmd = &cobra.Command{
 		if err != nil {
 			die("could not parse command flags: %v\n", err)
 		}
+		protocol, err := cmd.Flags().GetString("protocol")
+		if err != nil {
+			die("could not parse command flags: %v\n", err)
+		}
+
+		// setup logging
+		logger, err := serverLogging(logFile)
+		if err != nil {
+			if err != nil {
+				dieWithCallback(callbackAddr, "could not open log file %s: %v\n", logFile, err)
+			}
+		}
+
+		logger.InfoContext(
+			cmd.Context(),
+			"starting mount server",
+			"cache_dir", cacheDir,
+			"listen_addr", listenAddr,
+			"callback_addr", callbackAddr,
+			"log_file", logFile,
+			"protocol", protocol)
 
 		// handle cache dir
 		if cacheDir == "" {
@@ -111,14 +136,6 @@ var mountServerCmd = &cobra.Command{
 			}
 		}
 
-		// setup logging
-		logger, err := serverLogging(logFile)
-		if err != nil {
-			if err != nil {
-				dieWithCallback(callbackAddr, "could not open log file %s: %v\n", logFile, err)
-			}
-		}
-
 		// bind to listen address
 		listener, err := net.Listen("tcp4", listenAddr)
 		if err != nil {
@@ -138,28 +155,43 @@ var mountServerCmd = &cobra.Command{
 		ctx, cancelFn := signal.NotifyContext(ctx, os.Interrupt) // SIGTERM
 		defer cancelFn()
 
-		handler := nfs.NewHandler(ctx, tree, &nfs.Options{
-			Logger:          logger,
-			HandleCacheSize: nfs.DefaultHandleCacheSize,
-		})
-		go func() {
-			err = nfs.Serve(ctx, listener, handler)
-			if err != nil {
-				dieWithCallback(callbackAddr,
-					"could not serve NFS server on listener: %s: %v\n",
-					boundAddr, err)
-			}
-		}()
+		if protocol == "nfs" {
+			handler := nfs.NewHandler(ctx, tree, &nfs.Options{
+				Logger:          logger,
+				HandleCacheSize: nfs.DefaultHandleCacheSize,
+			})
+			go func() {
+				err = nfs.Serve(ctx, listener, handler)
+				if err != nil {
+					dieWithCallback(callbackAddr,
+						"could not serve NFS server on listener: %s: %v\n",
+						boundAddr, err)
+				}
+			}()
+		} else if protocol == "webdav" {
+			go func() {
+				err = dav.Serve(listener, tree, logger)
+				if err != nil {
+					dieWithCallback(callbackAddr,
+						"could not serve WebDav server on listener: %s: %v\n",
+						boundAddr, err)
+				}
+			}()
+		} else {
+			dieWithCallback(callbackAddr,
+				"unknown protocol: '%s'. Supported types are 'nfs' and 'webdav'", protocol)
+		}
 
 		if callbackAddr != "" {
-			err = sendCallback(callbackAddr, nfsServerCallbackStatusSuccess, boundAddr.String())
+			err = sendCallback(callbackAddr, mountServerStatusSuccess, boundAddr.String())
 			if err != nil {
-				die("could nto send listen address back to caller: %v\n", err)
+				die("could not send listen address back to caller: %v\n", err)
 			}
 		}
 
-		slog.InfoContext(cmd.Context(), "NFS server started successfully", "addr", boundAddr)
-
+		logger.InfoContext(cmd.Context(),
+			"mount server started successfully",
+			"bound_addr", boundAddr.String(), "protocol", protocol)
 		<-ctx.Done()
 	},
 }
@@ -167,6 +199,7 @@ var mountServerCmd = &cobra.Command{
 func init() {
 	mountServerCmd.Flags().String("cache-dir", "", "directory to cache read files in")
 	mountServerCmd.Flags().StringP("listen", "l", MountServerBindAddress, "address to listen on")
+	mountServerCmd.Flags().String("protocol", "nfs", "protocol to use (nfs | webdav)")
 	mountServerCmd.Flags().String("log", "", "optional log file to write to")
 	mountServerCmd.Flags().String("callback-addr", "", "callback address to report back to")
 	rootCmd.AddCommand(mountServerCmd)

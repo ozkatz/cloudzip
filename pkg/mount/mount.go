@@ -69,7 +69,7 @@ func tryThenSudo(cmd string, args ...string) error {
 	return nil // sudo was successful!
 }
 
-func Mount(addr string, location string) error {
+func NFSMount(addr string, location string) error {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return fmt.Errorf("%w: could not parse address: %s", ErrCommandError, addr)
@@ -107,6 +107,23 @@ func Umount(location string) error {
 		// TODO(ozkatz)
 	}
 	return fmt.Errorf("%w: don't know how to unmount on OS: %s", ErrCommandError, runtime.GOOS)
+}
+
+func WebDavMount(addr string, location string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("%w: could not parse address: %s", ErrCommandError, addr)
+	}
+	switch runtime.GOOS {
+	case GOOSMacOS:
+		return tryThenSudo("mount_webdav", "-S",
+			fmt.Sprintf("http://%s:%s/", host, port),
+			location)
+	case GOOSLinux:
+	case GOOSWindows:
+		// TODO(ozkatz)
+	}
+	return fmt.Errorf("%w: don't know how to mount on OS: %s", ErrCommandError, runtime.GOOS)
 }
 
 // fork crete a new process

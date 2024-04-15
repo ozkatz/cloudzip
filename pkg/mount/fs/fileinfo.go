@@ -44,7 +44,7 @@ type FileInfo struct {
 }
 
 func ImmutableDir(filename string, mtime time.Time) *FileInfo {
-	return ImmutableInfo(filename, time.Now(), os.ModeDir|0644, 0, nil)
+	return ImmutableInfo(filename, mtime, os.ModeDir|0644, 0, nil)
 }
 
 func ImmutableInfo(filename string, mtime time.Time, mode os.FileMode, size int64, opener Opener) *FileInfo {

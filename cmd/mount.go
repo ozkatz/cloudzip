@@ -14,20 +14,20 @@ import (
 	"github.com/ozkatz/cloudzip/pkg/mount"
 )
 
-type nfsServerCallbackStatus string
+type mountServerStatus string
 
 const (
-	nfsServerCallbackStatusSuccess nfsServerCallbackStatus = "SUCCESS"
-	nfsServerCallbackStatusError   nfsServerCallbackStatus = "ERROR"
+	mountServerStatusSuccess mountServerStatus = "SUCCESS"
+	mountServerStatusError   mountServerStatus = "ERROR"
 )
 
-type nfsServerCallback struct {
-	Status  nfsServerCallbackStatus
+type mountServerCallback struct {
+	Status  mountServerStatus
 	Message string
 }
 
-func getNFSServerCallback(callbackListener net.Listener) chan nfsServerCallback {
-	statusUpdates := make(chan nfsServerCallback)
+func getMountServerCallback(callbackListener net.Listener) chan mountServerCallback {
+	statusUpdates := make(chan mountServerCallback)
 	go func() {
 		conn, err := callbackListener.Accept()
 		if err != nil {
@@ -41,11 +41,11 @@ func getNFSServerCallback(callbackListener net.Listener) chan nfsServerCallback 
 
 		received, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
-			die("could not get back status from NFS server: %v (received = '%s')", err, received)
+			die("could not get back status from mount server: %v (received = '%s')", err, received)
 		}
 		received = strings.TrimSuffix(received, "\n")
 		parts := strings.SplitN(received, "=", 2)
-		msg := nfsServerCallback{nfsServerCallbackStatus(parts[0]), parts[1]}
+		msg := mountServerCallback{mountServerStatus(parts[0]), parts[1]}
 		statusUpdates <- msg
 		close(statusUpdates)
 		_ = conn.Close()
@@ -82,6 +82,10 @@ var mountCmd = &cobra.Command{
 		if err != nil {
 			die("could not parse command flags: %v\n", err)
 		}
+		protocol, err := cmd.Flags().GetString("protocol")
+		if err != nil {
+			die("could not parse command flags: %v\n", err)
+		}
 
 		serverCmd := []string{"mount-server", uri}
 		if cacheDir != "" {
@@ -95,27 +99,33 @@ var mountCmd = &cobra.Command{
 		if !noSpawn {
 			callbackListener, err := net.Listen("tcp4", "127.0.0.1:0")
 			if err != nil {
-				die("could not spawn NFS server: %v\n", err)
+				die("could not spawn mount server: %v\n", err)
 			}
 			callbackAddr := callbackListener.Addr().String()
 			serverCmd = append(serverCmd, "--callback-addr", callbackAddr)
 			if logFile != "" {
 				serverCmd = append(serverCmd, "--log", logFile)
 			}
-			serverStatus := getNFSServerCallback(callbackListener)
+			switch protocol {
+			case "nfs", "webdav":
+				serverCmd = append(serverCmd, "--protocol", protocol)
+			default:
+				die("unsupported protocol: '%s', select 'nfs' or 'webdav'", protocol)
+			}
+			serverStatus := getMountServerCallback(callbackListener)
 			pid, err := mount.Daemonize(serverCmd...)
 			if err != nil {
-				die("could not spawn NFS server: %v\n", err)
+				die("could not spawn mount server: %v\n", err)
 			}
 			callback := <-serverStatus
 			switch callback.Status {
-			case nfsServerCallbackStatusSuccess:
+			case mountServerStatusSuccess:
 				serverAddr = callback.Message
-			case nfsServerCallbackStatusError:
-				die("NFS server initialization error:\n%s\n", callback.Message)
+			case mountServerStatusError:
+				die("mount server initialization error:\n%s\n", callback.Message)
 			}
 			_ = callbackListener.Close()
-			slog.Info("NFS server started", "pid", pid, "listen_addr", serverAddr)
+			slog.Info("mount server started", "pid", pid, "listen_addr", serverAddr, "protocol", protocol)
 		} else {
 			serverAddr = listenAddr
 		}
@@ -133,8 +143,17 @@ var mountCmd = &cobra.Command{
 		}
 
 		// now mount it
-		if err := mount.Mount(serverAddr, targetDirectory); err != nil {
-			die("could not run mount command: %v\n", err)
+		switch protocol {
+		case "nfs":
+			if err := mount.NFSMount(serverAddr, targetDirectory); err != nil {
+				die("could not run mount command: %v\n", err)
+			}
+		case "webdav":
+			if err := mount.WebDavMount(serverAddr, targetDirectory); err != nil {
+				die("could not run mount command: %v\n", err)
+			}
+		default:
+			die("unsupported protocol: '%s', select 'nfs' or 'webdav'", protocol)
 		}
 	},
 }
@@ -144,6 +163,7 @@ func init() {
 	mountCmd.Flags().StringP("listen", "l", MountServerBindAddress, "address to listen on")
 	mountCmd.Flags().String("log", "", "log file for the server to write to")
 	mountCmd.Flags().Bool("no-spawn", false, "will not spawn a new server, assume one is already running")
+	mountCmd.Flags().String("protocol", "nfs", "protocol to use (nfs | webdav)")
 	_ = mountCmd.Flags().MarkHidden("no-spawn")
 	rootCmd.AddCommand(mountCmd)
 }
