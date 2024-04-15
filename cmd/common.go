@@ -67,10 +67,7 @@ func getCdr(remoteFile string) []*zipfile.CDR {
 		_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open remote zip file: %v\n", err))
 		os.Exit(1)
 	}
-	zip := zipfile.NewCentralDirectoryParser(zipfile.NewStorageAdapter(ctx, f))
-		f:   obj,
-		ctx: ctx,
-	})
+	zip := zipfile.NewCentralDirectoryParser(zipfile.NewStorageAdapter(ctx, obj))
 
 	files, err := zip.GetCentralDirectory()
 	if err != nil {

@@ -12,24 +12,12 @@ import (
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
 )
 
-type adapter struct {
-	f   remote.Fetcher
-	ctx context.Context
-}
-
-func (a *adapter) Fetch(start, end *int64) (io.Reader, error) {
-	return a.f.Fetch(a.ctx, start, end)
-}
-
 func parser(uri string) (*zipfile.CentralDirectoryParser, error) {
 	fetcher, err := remote.Object(uri)
 	if err != nil {
 		return nil, err
 	}
-	return zipfile.NewCentralDirectoryParser(&adapter{
-		ctx: context.Background(),
-		f:   fetcher,
-	}), nil
+	return zipfile.NewCentralDirectoryParser(zipfile.NewStorageAdapter(context.Background(), fetcher)), nil
 }
 
 type byteReadSeekCloser struct {
@@ -42,10 +30,7 @@ func (b *byteReadSeekCloser) Close() error {
 
 func memParser(data []byte) *zipfile.CentralDirectoryParser {
 	fetcher := remote.NewLocalFetcherFromData(&byteReadSeekCloser{Reader: bytes.NewReader(data)})
-	return zipfile.NewCentralDirectoryParser(&adapter{
-		ctx: context.Background(),
-		f:   fetcher,
-	})
+	return zipfile.NewCentralDirectoryParser(zipfile.NewStorageAdapter(context.Background(), fetcher))
 }
 
 func BenchmarkCentralDirectoryParser_Read(b *testing.B) {

@@ -2,6 +2,7 @@ package nfs
 
 import (
 	"context"
+	"log/slog"
 	"net"
 
 	"github.com/willscott/go-nfs"
@@ -18,18 +19,24 @@ func Serve(ctx context.Context, listener net.Listener, handler nfs.Handler) erro
 	return server.Serve(listener)
 }
 
-type NFSOptions struct {
+type Options struct {
 	HandleCacheSize int
+	Logger          *slog.Logger
 }
 
-const defaultHandleCacheSize = 1000000
+const DefaultHandleCacheSize = 1000000
 
-var DefaultOptions = &NFSOptions{HandleCacheSize: defaultHandleCacheSize}
+var DefaultOptions = &Options{
+	HandleCacheSize: DefaultHandleCacheSize,
+}
 
-func NewHandler(tree index.Tree, opts *NFSOptions) nfs.Handler {
+func NewHandler(ctx context.Context, tree index.Tree, opts *Options) nfs.Handler {
 	zipFs := NewZipFS(tree)
 	if opts == nil {
 		opts = DefaultOptions
+	}
+	if opts.Logger != nil {
+		zipFs = LoggingFS(ctx, zipFs, opts.Logger)
 	}
 	fsHandler := nfshelper.NewNullAuthHandler(zipFs)
 	return nfshelper.NewCachingHandler(fsHandler, opts.HandleCacheSize)

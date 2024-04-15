@@ -30,10 +30,7 @@ var catCmd = &cobra.Command{
 			_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open zip file: %v\n", err))
 			os.Exit(1)
 		}
-		zip := zipfile.NewCentralDirectoryParser(&adapter{
-			f:   obj,
-			ctx: ctx,
-		})
+		zip := zipfile.NewCentralDirectoryParser(zipfile.NewStorageAdapter(ctx, obj))
 		reader, err := zip.Read(internalPath)
 		if err != nil {
 			_, _ = os.Stderr.WriteString(fmt.Sprintf("could not open zip file stream: %v\n", err))

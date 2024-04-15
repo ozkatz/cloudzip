@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -43,6 +44,23 @@ func sendCallback(toAddr string, className nfsServerCallbackStatus, msg string) 
 	return conn.Close()
 }
 
+func serverLogging(logFile string) (*slog.Logger, error) {
+	writer := io.Discard
+	var err error
+	if logFile != "" {
+		writer, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0755)
+		if err != nil {
+			return nil, err
+		}
+	}
+	opts := &slog.HandlerOptions{AddSource: false, Level: slog.LevelInfo}
+	if os.Getenv("CLOUDZIP_LOGGING") == "DEBUG" {
+		opts.Level = slog.LevelDebug
+	}
+	handler := slog.NewJSONHandler(writer, opts)
+	return slog.New(handler), nil
+}
+
 var mountServerCmd = &cobra.Command{
 	Use:    "mount-server",
 	Hidden: true,
@@ -59,6 +77,10 @@ var mountServerCmd = &cobra.Command{
 			die("could not parse command flags: %v\n", err)
 		}
 		callbackAddr, err := cmd.Flags().GetString("callback-addr")
+		if err != nil {
+			die("could not parse command flags: %v\n", err)
+		}
+		logFile, err := cmd.Flags().GetString("log")
 		if err != nil {
 			die("could not parse command flags: %v\n", err)
 		}
@@ -89,6 +111,14 @@ var mountServerCmd = &cobra.Command{
 			}
 		}
 
+		// setup logging
+		logger, err := serverLogging(logFile)
+		if err != nil {
+			if err != nil {
+				dieWithCallback(callbackAddr, "could not open log file %s: %v\n", logFile, err)
+			}
+		}
+
 		// bind to listen address
 		listener, err := net.Listen("tcp4", listenAddr)
 		if err != nil {
@@ -108,7 +138,10 @@ var mountServerCmd = &cobra.Command{
 		ctx, cancelFn := signal.NotifyContext(ctx, os.Interrupt) // SIGTERM
 		defer cancelFn()
 
-		handler := nfs.NewHandler(tree, nil)
+		handler := nfs.NewHandler(ctx, tree, &nfs.Options{
+			Logger:          logger,
+			HandleCacheSize: nfs.DefaultHandleCacheSize,
+		})
 		go func() {
 			err = nfs.Serve(ctx, listener, handler)
 			if err != nil {
@@ -134,6 +167,7 @@ var mountServerCmd = &cobra.Command{
 func init() {
 	mountServerCmd.Flags().String("cache-dir", "", "directory to cache read files in")
 	mountServerCmd.Flags().StringP("listen", "l", MountServerBindAddress, "address to listen on")
+	mountServerCmd.Flags().String("log", "", "optional log file to write to")
 	mountServerCmd.Flags().String("callback-addr", "", "callback address to report back to")
 	rootCmd.AddCommand(mountServerCmd)
 }

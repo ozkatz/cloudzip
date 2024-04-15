@@ -78,6 +78,10 @@ var mountCmd = &cobra.Command{
 		if err != nil {
 			die("could not parse command flags: %v\n", err)
 		}
+		logFile, err := cmd.Flags().GetString("log")
+		if err != nil {
+			die("could not parse command flags: %v\n", err)
+		}
 
 		serverCmd := []string{"mount-server", uri}
 		if cacheDir != "" {
@@ -95,6 +99,9 @@ var mountCmd = &cobra.Command{
 			}
 			callbackAddr := callbackListener.Addr().String()
 			serverCmd = append(serverCmd, "--callback-addr", callbackAddr)
+			if logFile != "" {
+				serverCmd = append(serverCmd, "--log", logFile)
+			}
 			serverStatus := getNFSServerCallback(callbackListener)
 			pid, err := mount.Daemonize(serverCmd...)
 			if err != nil {
@@ -135,6 +142,7 @@ var mountCmd = &cobra.Command{
 func init() {
 	mountCmd.Flags().String("cache-dir", "", "directory to cache read files in")
 	mountCmd.Flags().StringP("listen", "l", MountServerBindAddress, "address to listen on")
+	mountCmd.Flags().String("log", "", "log file for the server to write to")
 	mountCmd.Flags().Bool("no-spawn", false, "will not spawn a new server, assume one is already running")
 	_ = mountCmd.Flags().MarkHidden("no-spawn")
 	rootCmd.AddCommand(mountCmd)
