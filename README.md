@@ -7,6 +7,14 @@ list and get specific files from remote zip archives without downloading the who
 
 ## Installation
 
+### Download cloudzip
+
+see [releases](https://github.com/ozkatz/cloudzip/releases) for the latest release, you can download binaries directly from GitHub.
+
+`cz` is available as a single binary, so no installation, simply stick it somewhere in your `$PATH`.
+
+### Building from source
+
 Clone and build the project (no binaries available atm, sorry!)
 
 ```shell
