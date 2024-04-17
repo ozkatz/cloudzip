@@ -41,6 +41,12 @@ Downloading and extracting a specific object from within a zip file:
 cz cat s3://example-bucket/path/to/archive.zip images/cat.png > cat.png
 ```
 
+HTTP proxy mode (see below):
+
+```shell
+cz http s3://example-bucket/path
+```
+
 Mounting (See below):
 
 ```shell
@@ -101,6 +107,17 @@ Once the central directory is read, it is parsed and written to `stdout`, simila
 Reading a file from the remote zip involves another HTTP range request: once we have the central directory, we find the relevant entry for the file we wish to get, and figure out its offset and size. This is then used to issue a 3rd HTTP range request.
 
 Because zip files store each file (whether compressed or not) independently, this is enough to uncompress and write the file to `stdout`.
+
+#### ⚠️ Experimental: `cz http`
+
+CloudZip can run in proxy mode, allowing you to read archived files directly HTTP client (usually a browser). 
+
+```shell
+cz http s3://example-bucket/path
+```
+
+This will open an HTTP server on a random port (use `--listen` to bind to another address). The server will map the requested path relative to the supplied S3 url argument. A single query argument `filename` should be supplied, referencing the file within the zip file. E.g. `GET /a/b/c.zip?filename=foobar.png` will serve `foobar.png` from within the `s3://example-bucket/path/a/b/c.zip` archive.
+
 
 #### ⚠️ Experimental: `cz mount`
 

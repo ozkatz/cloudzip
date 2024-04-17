@@ -35,7 +35,7 @@ func die(fstring string, args ...interface{}) {
 func setupLogging() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		AddSource: true,
-		Level:     slog.LevelError,
+		Level:     slog.LevelWarn,
 	})))
 	if os.Getenv("CLOUDZIP_LOGGING") == "DEBUG" {
 		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
