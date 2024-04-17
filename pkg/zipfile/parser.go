@@ -350,14 +350,14 @@ func (p *CentralDirectoryParser) GetCentralDirectory() ([]*CDR, error) {
 	return p.parseCDR(loc)
 }
 
-func (p *CentralDirectoryParser) readerForRecord(f *CDR) (io.Reader, error) {
+func ReaderForRecord(f *CDR, fetcher OffsetFetcher) (io.Reader, error) {
 	// found record!
 	off := f.LocalFileHeaderOffset
-	approxHeaderSize := uint64(p.localHeaderSizeHeuristic(f.FileName))
+	approxHeaderSize := uint64(localHeaderSizeHeuristic(f.FileName))
 	approxTotalSize := f.CompressedSizeBytes + approxHeaderSize
 
 	// open a reader at offset
-	dataReader, err := p.reader.Fetch(offset(off), offset(off+approxTotalSize))
+	dataReader, err := fetcher.Fetch(offset(off), offset(off+approxTotalSize))
 	if err != nil {
 		return nil, err
 	}
@@ -383,6 +383,10 @@ func (p *CentralDirectoryParser) readerForRecord(f *CDR) (io.Reader, error) {
 	return dataReader, nil
 }
 
+func (p *CentralDirectoryParser) readerForRecord(f *CDR) (io.Reader, error) {
+	return ReaderForRecord(f, p.reader)
+}
+
 func (p *CentralDirectoryParser) Read(fileName string) (io.Reader, error) {
 	directory, err := p.GetCentralDirectory()
 	if err != nil {
@@ -396,7 +400,7 @@ func (p *CentralDirectoryParser) Read(fileName string) (io.Reader, error) {
 	return nil, ErrFileNotFound
 }
 
-func (p *CentralDirectoryParser) localHeaderSizeHeuristic(filename string) int64 {
+func localHeaderSizeHeuristic(filename string) int64 {
 	nameLength := len([]byte(filename))
 	headerSize := int64(30 + nameLength) // we are at the extra field, not knowing its size
 	return headerSize + 1024             // assume 1k variable length field as worst case

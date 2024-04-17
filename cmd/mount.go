@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -159,11 +160,15 @@ var mountCmd = &cobra.Command{
 }
 
 func init() {
+	var defaultProtocol = "nfs"
+	if runtime.GOOS == "windows" {
+		defaultProtocol = "webdav"
+	}
 	mountCmd.Flags().String("cache-dir", "", "directory to cache read files in")
 	mountCmd.Flags().StringP("listen", "l", MountServerBindAddress, "address to listen on")
 	mountCmd.Flags().String("log", "", "log file for the server to write to")
 	mountCmd.Flags().Bool("no-spawn", false, "will not spawn a new server, assume one is already running")
-	mountCmd.Flags().String("protocol", "nfs", "protocol to use (nfs | webdav)")
+	mountCmd.Flags().String("protocol", defaultProtocol, "protocol to use (nfs | webdav)")
 	_ = mountCmd.Flags().MarkHidden("no-spawn")
 	rootCmd.AddCommand(mountCmd)
 }

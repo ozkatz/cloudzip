@@ -110,6 +110,7 @@ func loadLakefsConfig() (*lakeFSConfig, error) {
 type LakeFSFetcher struct {
 	uri              string
 	preSignSupported bool
+	logger           *slog.Logger
 
 	// for refreshing pre-signed url
 	cachedUrl string
@@ -124,6 +125,7 @@ func NewLakeFSFetcher(uri string) (*LakeFSFetcher, error) {
 	}
 	return &LakeFSFetcher{
 		uri:              uri,
+		logger:           DummyLogger(),
 		preSignSupported: preSignSupported,
 		l:                &sync.Mutex{},
 	}, nil
@@ -233,6 +235,10 @@ func intVal(i *int64) (x int64) {
 	return *i
 }
 
+func (f *LakeFSFetcher) setLogger(logger *slog.Logger) {
+	f.logger = logger
+}
+
 func (f *LakeFSFetcher) getURL(cfg *lakeFSConfig) (string, error) {
 	f.l.Lock()
 	defer f.l.Unlock()
@@ -278,21 +284,23 @@ func (f *LakeFSFetcher) directFetch(ctx context.Context, cfg *lakeFSConfig, star
 
 func (f *LakeFSFetcher) rangeRequest(req *http.Request, startOffset *int64, endOffset *int64) (io.ReadCloser, error) {
 	rangeHeader := buildRange(startOffset, endOffset)
+	rangeHeaderStr := ""
 	if rangeHeader != nil {
-		req.Header.Set("Range", *rangeHeader)
+		rangeHeaderStr = *rangeHeader
+		req.Header.Set("Range", rangeHeaderStr)
 	}
 	start := time.Now()
 	response, err := http.DefaultClient.Do(req)
 	tookMs := time.Since(start).Milliseconds()
 	if err != nil {
-		slog.Error("lakefs.Get", "range", rangeHeader, "url", f.uri, "took_ms", tookMs, "error", err)
+		f.logger.Error("lakefs.Get", "range", rangeHeaderStr, "url", f.uri, "took_ms", tookMs, "error", err)
 		return nil, err
 	}
 	if response.StatusCode == http.StatusNotFound {
-		slog.Warn("lakefs.Get", "range", rangeHeader, "url", f.uri, "took_ms", tookMs, "error", "NotFound")
+		f.logger.Warn("lakefs.Get", "range", rangeHeaderStr, "url", f.uri, "took_ms", tookMs, "error", "NotFound")
 		return nil, ErrDoesNotExist
 	}
-	slog.Debug("lakefs.Get", "range", rangeHeader, "url", f.uri, "took_ms", tookMs, "error", nil)
+	f.logger.Debug("lakefs.Get", "range", rangeHeaderStr, "url", f.uri, "took_ms", tookMs, "error", nil)
 	return response.Body, nil
 }
 

@@ -76,6 +76,7 @@ type S3ObjectFetcher struct {
 	client S3Getter
 	bucket string
 	path   string
+	logger *slog.Logger
 }
 
 func NewS3ObjectFetcher(uri string) (*S3ObjectFetcher, error) {
@@ -87,12 +88,16 @@ func NewS3ObjectFetcher(uri string) (*S3ObjectFetcher, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return &S3ObjectFetcher{
 		client: client,
 		bucket: parsed.Bucket,
 		path:   parsed.Path,
+		logger: DummyLogger(),
 	}, nil
+}
+
+func (s *S3ObjectFetcher) setLogger(logger *slog.Logger) {
+	s.logger = logger
 }
 
 func (s *S3ObjectFetcher) Fetch(ctx context.Context, startOffset *int64, endOffset *int64) (io.ReadCloser, error) {
@@ -104,13 +109,14 @@ func (s *S3ObjectFetcher) Fetch(ctx context.Context, startOffset *int64, endOffs
 		Range:  rng,
 	})
 	tookMs := time.Since(start).Milliseconds()
+	rangeString := aws.ToString(rng)
 	if s3IsNotFoundErr(err) {
-		slog.Warn("s3.GetObject", "range", rng, "bucket", s.bucket, "key", s.path, "took_ms", tookMs, "error", "NotFound")
+		s.logger.WarnContext(ctx, "s3.GetObject", "range", rangeString, "bucket", s.bucket, "key", s.path, "took_ms", tookMs, "error", "NotFound")
 		return nil, ErrDoesNotExist
 	} else if err != nil {
-		slog.Error("s3.GetObject", "range", rng, "bucket", s.bucket, "key", s.path, "took_ms", tookMs, "error", err)
+		s.logger.ErrorContext(ctx, "s3.GetObject", "range", rangeString, "bucket", s.bucket, "key", s.path, "took_ms", tookMs, "error", err)
 		return nil, err
 	}
-	slog.Debug("s3.GetObject", "range", rng, "bucket", s.bucket, "key", s.path, "took_ms", tookMs, "error", nil)
+	s.logger.DebugContext(ctx, "s3.GetObject", "range", rangeString, "bucket", s.bucket, "key", s.path, "took_ms", tookMs, "error", nil)
 	return response.Body, nil
 }

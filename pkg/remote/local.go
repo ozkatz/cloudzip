@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/url"
 	"os"
 	"path"
@@ -18,11 +19,13 @@ type ReadSeekerCloser interface {
 
 type LocalFetcher struct {
 	handle ReadSeekerCloser
+	logger *slog.Logger
 }
 
 func NewLocalFetcherFromData(data ReadSeekerCloser) *LocalFetcher {
 	return &LocalFetcher{
 		handle: data,
+		logger: DummyLogger(),
 	}
 }
 
@@ -40,7 +43,12 @@ func NewLocalFetcher(uri string) (*LocalFetcher, error) {
 
 	return &LocalFetcher{
 		handle: handle,
+		logger: DummyLogger(),
 	}, nil
+}
+
+func (l *LocalFetcher) setLogger(logger *slog.Logger) {
+	l.logger = logger
 }
 
 func (l *LocalFetcher) Fetch(_ context.Context, startOffset *int64, endOffset *int64) (io.ReadCloser, error) {

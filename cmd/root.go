@@ -8,6 +8,7 @@ import (
 )
 
 const (
+	CloudZipVersion        = "0.0.1dev"
 	MountServerBindAddress = "127.0.0.1:0"
 )
 

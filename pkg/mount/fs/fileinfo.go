@@ -1,6 +1,8 @@
 package fs
 
 import (
+	"context"
+	"fmt"
 	"hash/fnv"
 	"io/fs"
 	"os"
@@ -122,4 +124,14 @@ func (f *FileInfo) NLink() uint32 {
 
 func (f *FileInfo) Sys() any {
 	return nil
+}
+
+// ContentType  implements webdav.ContentTyper
+func (f *FileInfo) ContentType(ctx context.Context) (string, error) {
+	return "application/octet-stream", nil
+}
+
+// ETag implements webdav.ETager
+func (f *FileInfo) ETag(ctx context.Context) (string, error) {
+	return fmt.Sprintf("%x", f.id), nil
 }

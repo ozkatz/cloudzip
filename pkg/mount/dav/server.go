@@ -19,7 +19,7 @@ func newHandler(fs webdav.FileSystem, prefix string) http.Handler {
 }
 
 func Serve(listener net.Listener, tree index.Tree, logger *slog.Logger) error {
-	h := newHandler(NewDavFS(tree), "/")
+	h := newHandler(NewDavFS(tree), "/mount")
 	if logger != nil {
 		h = &loggingHandler{
 			logger: logger,

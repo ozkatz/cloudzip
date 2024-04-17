@@ -144,8 +144,11 @@ var mountServerCmd = &cobra.Command{
 		boundAddr := listener.Addr()
 
 		// build index for remote archive
-		tree, err := mount.BuildZipTree(ctx, cacheDir, remoteFile, map[string]interface{}{
+		tree, err := mount.BuildZipTree(ctx, logger, cacheDir, remoteFile, map[string]interface{}{
 			"listen_addr": boundAddr,
+			"protocol":    protocol,
+			"version":     CloudZipVersion,
+			"logfile":     logFile,
 		})
 		if err != nil {
 			dieWithCallback(callbackAddr, "could not create filesystem: %v\n", err)

@@ -27,6 +27,9 @@ func (f *treeFile) Close() error {
 }
 
 func (f *treeFile) Read(p []byte) (n int, err error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
 	if f.handle == nil {
 		f.handle, err = f.fi.Open(0, 0755)
 		if err != nil {

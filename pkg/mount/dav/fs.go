@@ -30,18 +30,6 @@ func (fs *davFS) OpenFile(ctx context.Context, name string, flag int, perm os.Fi
 		tree: fs.tree,
 		fi:   f,
 	}, nil
-	//if f.IsDir() {
-	//
-	//}
-	//opened, err := f.Open(flag, perm)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//return &treeFile{
-	//	tree:   fs.tree,
-	//	fi:     f,
-	//	handle: opened,
-	//}, nil
 }
 
 func (fs *davFS) RemoveAll(ctx context.Context, name string) error {

@@ -24,6 +24,7 @@ const (
 
 type KaggleFetcher struct {
 	uri             string
+	logger          *slog.Logger
 	cacheDatasetUrl string
 	cacheExpiresAt  time.Time
 	l               *sync.Mutex
@@ -59,6 +60,7 @@ var _ Fetcher = &KaggleFetcher{}
 func NewKaggleFetcher(uri string) (*KaggleFetcher, error) {
 	return &KaggleFetcher{
 		uri:             uri,
+		logger:          DummyLogger(),
 		l:               &sync.Mutex{},
 		cacheDatasetUrl: "",
 	}, nil
@@ -75,6 +77,9 @@ func (k *KaggleFetcher) parseUri() (string, error) {
 		KaggleApiEndpoint,
 		url.QueryEscape(slug),
 		url.QueryEscape(dataset)), nil
+}
+func (k *KaggleFetcher) setLogger(logger *slog.Logger) {
+	k.logger = logger
 }
 
 func (k *KaggleFetcher) fetchDatasetUrl() (string, error) {
@@ -131,21 +136,24 @@ func (k *KaggleFetcher) Fetch(ctx context.Context, startOffset *int64, endOffset
 		return nil, err
 	}
 	rangeHeader := buildRange(startOffset, endOffset)
+	rangeHeaderStr := ""
 	if rangeHeader != nil {
-		req.Header.Set("Range", *rangeHeader)
+		rangeHeaderStr = *rangeHeader
+		req.Header.Set("Range", rangeHeaderStr)
+
 	}
 	req = req.WithContext(ctx)
 	start := time.Now()
 	response, err := http.DefaultClient.Do(req)
 	tookMs := time.Since(start).Milliseconds()
 	if err != nil {
-		slog.Error("kaggle.Get", "range", rangeHeader, "url", datasetUrl, "took_ms", tookMs, "error", err)
+		k.logger.ErrorContext(ctx, "kaggle.Get", "range", rangeHeaderStr, "url", datasetUrl, "took_ms", tookMs, "error", err)
 		return nil, err
 	}
 	if response.StatusCode == http.StatusNotFound {
-		slog.Warn("kaggle.Get", "range", rangeHeader, "url", datasetUrl, "took_ms", tookMs, "error", "NotFound")
+		k.logger.WarnContext(ctx, "kaggle.Get", "range", rangeHeaderStr, "url", datasetUrl, "took_ms", tookMs, "error", "NotFound")
 		return nil, ErrDoesNotExist
 	}
-	slog.Debug("kaggle.Get", "range", rangeHeader, "url", datasetUrl, "took_ms", tookMs, "error", nil)
+	k.logger.DebugContext(ctx, "kaggle.Get", "range", rangeHeaderStr, "url", datasetUrl, "took_ms", tookMs, "error", nil)
 	return response.Body, nil
 }

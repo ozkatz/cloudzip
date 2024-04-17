@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"sort"
@@ -29,21 +30,20 @@ func asKey(strs ...string) string {
 	return hex.EncodeToString(out)
 }
 
-func getOpenerFor(zipPath string, record *zipfile.CDR, cache *fs.FileCache) fs.OpenFn {
+func getOpenerFor(logger *slog.Logger, zipPath string, record *zipfile.CDR, cache *fs.FileCache) fs.OpenFn {
 	return func(fullPath string, flag int, perm os.FileMode) (fs.FileLike, error) {
 		filename := path.Clean(record.FileName)
 		key := asKey(zipPath, filename, strconv.Itoa(int(record.CRC32Uncompressed)))
 		f, err := cache.Get(key)
 		if errors.Is(err, os.ErrNotExist) {
 			// cache miss!
-			remoteZip, err := remote.Object(zipPath)
+			remoteZip, err := remote.Object(zipPath, remote.WithLogger(logger))
 			if err != nil {
 				return nil, err
 			}
 			ctx := context.Background()
 			fetcher := zipfile.NewStorageAdapter(ctx, remoteZip)
-			zip := zipfile.NewCentralDirectoryParser(fetcher)
-			reader, err := zip.Read(filename)
+			reader, err := zipfile.ReaderForRecord(record, fetcher)
 			if err != nil {
 				return nil, err
 			}
@@ -57,8 +57,8 @@ func getOpenerFor(zipPath string, record *zipfile.CDR, cache *fs.FileCache) fs.O
 	}
 }
 
-func BuildZipTree(ctx context.Context, cacheDir, remoteZipURI string, procAttrs map[string]interface{}) (index.Tree, error) {
-	obj, err := remote.Object(remoteZipURI)
+func BuildZipTree(ctx context.Context, logger *slog.Logger, cacheDir, remoteZipURI string, procAttrs map[string]interface{}) (index.Tree, error) {
+	obj, err := remote.Object(remoteZipURI, remote.WithLogger(logger))
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func BuildZipTree(ctx context.Context, cacheDir, remoteZipURI string, procAttrs 
 			f.Modified,
 			f.Mode,
 			int64(f.UncompressedSizeBytes),
-			getOpenerFor(remoteZipURI, f, cache),
+			getOpenerFor(logger, remoteZipURI, f, cache),
 		))
 	}
 

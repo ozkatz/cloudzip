@@ -52,7 +52,11 @@ func killPid(pid int) error {
 	if err != nil {
 		return err
 	}
-	return proc.Signal(os.Interrupt)
+	signal := os.Interrupt
+	if runtime.GOOS == GOOSWindows {
+		signal = os.Kill
+	}
+	return proc.Signal(signal)
 }
 
 func tryThenSudo(cmd string, args ...string) error {
@@ -91,11 +95,10 @@ func NFSMount(addr string, location string) error {
 }
 
 func Umount(location string) error {
-	pid, err := readPidFile(filepath.Join(location, ".cz/server.pid"))
+	pid, err := readPidFile(filepath.Join(location, ".cz", "server.pid"))
 	if err != nil {
 		return err
 	}
-
 	switch runtime.GOOS {
 	case GOOSMacOS, GOOSLinux:
 		err := tryThenSudo("umount", location)
@@ -104,7 +107,11 @@ func Umount(location string) error {
 		}
 		return killPid(pid)
 	case GOOSWindows:
-		// TODO(ozkatz)
+		err := execMountCommand("cmd.exe", "/c", "rd", location)
+		if err != nil {
+			return err
+		}
+		return killPid(pid)
 	}
 	return fmt.Errorf("%w: don't know how to unmount on OS: %s", ErrCommandError, runtime.GOOS)
 }
@@ -117,18 +124,37 @@ func WebDavMount(addr string, location string) error {
 	switch runtime.GOOS {
 	case GOOSMacOS:
 		return tryThenSudo("mount_webdav", "-S",
-			fmt.Sprintf("http://%s:%s/", host, port),
+			fmt.Sprintf("http://%s:%s/mount/", host, port),
 			location)
-	case GOOSLinux:
 	case GOOSWindows:
-		// TODO(ozkatz)
+		// check if existing directory
+		// try to remove if empty
+		// otherwise, fail
+		stat, err := os.Stat(location)
+		if !os.IsNotExist(err) && err != nil {
+			return err
+		} else if err == nil {
+			if stat.IsDir() {
+				err = execMountCommand("cmd.exe", "/c", "rd", location)
+			} else {
+				return fmt.Errorf("%w: %s: path already exists", ErrCommandError, location)
+			}
+		}
+
+		// create link to url
+		mountUrl := fmt.Sprintf("\\\\%s@%s\\mount", host, port)
+		return execMountCommand("cmd.exe", "/c", "mklink", "/d", location, mountUrl)
 	}
 	return fmt.Errorf("%w: don't know how to mount on OS: %s", ErrCommandError, runtime.GOOS)
 }
 
 // fork crete a new process
 func fork(args []string) (int, error) {
-	cmd := exec.Command(os.Args[0], args...)
+	path, err := exec.LookPath(os.Args[0])
+	if errors.Is(err, exec.ErrDot) {
+		path = fmt.Sprintf("./%s", os.Args[0])
+	}
+	cmd := exec.Command(path, args...)
 	cmd.Env = os.Environ()
 	if err := cmd.Start(); err != nil {
 		return 0, err
