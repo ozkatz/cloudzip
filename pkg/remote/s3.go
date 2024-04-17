@@ -54,7 +54,8 @@ func s3IsNotFoundErr(err error) bool {
 		return false
 	}
 	var nf *types.NotFound
-	return errors.As(err, &nf)
+	var nosuchkey *types.NoSuchKey
+	return errors.As(err, &nf) || errors.As(err, &nosuchkey)
 }
 
 func s3parseUri(uri string) (*s3ParsedUri, error) {
