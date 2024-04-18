@@ -32,13 +32,18 @@ var httpCmd = &cobra.Command{
 				slog.Debug("HTTP Handler", "objectPath", r.URL.Path, "internalPath", internalPath)
 				obj, err := remote.Object(remotePath + r.URL.Path)
 				if err != nil {
-					slog.Warn("could not open zip file", "error", err)
+					slog.Warn("could not open zip file", "error", err,
+						"objectPath", r.URL.Path, "internalPath", internalPath)
 					w.WriteHeader(http.StatusInternalServerError)
 					return
 				}
 				zip := zipfile.NewCentralDirectoryParser(zipfile.NewStorageAdapter(r.Context(), obj))
 				reader, err := zip.Read(internalPath)
 				if errors.Is(err, remote.ErrDoesNotExist) || errors.Is(err, zipfile.ErrFileNotFound) {
+					slog.DebugContext(r.Context(), "not found",
+						"error", err,
+						"objectPath", r.URL.Path,
+						"internalPath", internalPath)
 					w.WriteHeader(http.StatusNotFound)
 					return
 				} else if err != nil {
@@ -46,14 +51,25 @@ var httpCmd = &cobra.Command{
 					slog.Warn("Error reading zip file from upstream", "error", err)
 					return
 				}
-				io.Copy(w, reader)
+				n, err := io.Copy(w, reader)
+				if err != nil {
+					slog.ErrorContext(r.Context(), "error writing response",
+						"error", err,
+						"objectPath", r.URL.Path,
+						"internalPath", internalPath)
+				} else {
+					slog.DebugContext(r.Context(), "wrote response",
+						"objectPath", r.URL.Path,
+						"internalPath", internalPath,
+						"response_bytes", n)
+				}
 			})
 
 		listener, err := net.Listen("tcp", bindAddress)
 		if err != nil {
 			die("Failed to bind port: %v\n", err)
 		}
-		fmt.Printf("HTTP server listening on %s\n", listener.Addr().String())
+		fmt.Printf("HTTP server listening on http://%s\n", listener.Addr().String())
 		err = http.Serve(listener, nil)
 		if err != nil {
 			slog.Error("Error running HTTP server", "error", err)
