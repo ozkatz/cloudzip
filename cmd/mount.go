@@ -18,6 +18,10 @@ import (
 type mountServerStatus string
 
 const (
+	mountServerCallbackTimeout = 30 * time.Second
+)
+
+const (
 	mountServerStatusSuccess mountServerStatus = "SUCCESS"
 	mountServerStatusError   mountServerStatus = "ERROR"
 )
@@ -118,7 +122,20 @@ var mountCmd = &cobra.Command{
 			if err != nil {
 				die("could not spawn mount server: %v\n", err)
 			}
-			callback := <-serverStatus
+
+			var callback mountServerCallback
+			select {
+			case callback = <-serverStatus:
+				break
+			case <-time.After(mountServerCallbackTimeout):
+				// non-responsive: attempt to kill & die
+				proc, err := os.FindProcess(pid)
+				if err == nil {
+					_ = proc.Kill()
+				}
+				die("timeout waiting for mount server\n")
+			}
+
 			switch callback.Status {
 			case mountServerStatusSuccess:
 				serverAddr = callback.Message
