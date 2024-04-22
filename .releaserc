@@ -1,0 +1,46 @@
+{
+    "$schema": "https://json.schemastore.org/semantic-release.json",
+    "repositoryUrl": "https://github.com/ozkatz/cloudzip.git",
+    "branches": [
+        "+([0-9])?(.{+([0-9]),x}).x",
+        "master",
+        {
+            "name": "beta",
+            "prerelease": true
+        }
+    ],
+    "tagFormat": "v${version}",
+    "plugins": [
+        "@semantic-release/commit-analyzer",
+        "@semantic-release/release-notes-generator",
+        [
+            "@semantic-release/changelog",
+            {
+                "changelogFile": "CHANGELOG.md"
+            }
+        ],
+        [
+            "@semantic-release/git",
+            {
+                "assets": [
+                    "package.json",
+                    "package-lock.json",
+                    "CHANGELOG.md"
+                ],
+                "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+            }
+        ],
+        [
+            "@semantic-release/github",
+            {
+                "assets": [
+                    {
+                        "path": "./pack.zip",
+                        "label": "cli-v${nextRelease.version}.zip",
+                        "name": "cli-v${nextRelease.version}.zip"
+                    }
+                ]
+            }
+        ]
+    ]
+}
