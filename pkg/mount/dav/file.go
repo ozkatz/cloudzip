@@ -5,16 +5,16 @@ import (
 
 	"golang.org/x/net/webdav"
 
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
+	"github.com/ozkatz/cloudzip/pkg/mount/commonfs"
 )
 
 var _ webdav.File = &treeFile{}
 
 type treeFile struct {
-	tree index.Tree
-	fi   *index.FileInfo
+	tree commonfs.Tree
+	fi   *commonfs.FileInfo
 
-	handle  index.FileLike
+	handle  commonfs.FileLike
 	voffset int64
 }
 

@@ -8,7 +8,7 @@ import (
 	"github.com/willscott/go-nfs"
 	nfshelper "github.com/willscott/go-nfs/helpers"
 
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
+	"github.com/ozkatz/cloudzip/pkg/mount/commonfs"
 )
 
 func Serve(ctx context.Context, listener net.Listener, handler nfs.Handler) error {
@@ -30,7 +30,7 @@ var DefaultOptions = &Options{
 	HandleCacheSize: DefaultHandleCacheSize,
 }
 
-func NewHandler(ctx context.Context, tree index.Tree, opts *Options) nfs.Handler {
+func NewHandler(ctx context.Context, tree commonfs.Tree, opts *Options) nfs.Handler {
 	zipFs := NewZipFS(tree)
 	if opts == nil {
 		opts = DefaultOptions

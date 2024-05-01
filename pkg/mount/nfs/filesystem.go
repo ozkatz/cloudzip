@@ -6,14 +6,14 @@ import (
 
 	"github.com/go-git/go-billy/v5"
 
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
+	"github.com/ozkatz/cloudzip/pkg/mount/commonfs"
 )
 
 type ZipFS struct {
-	Tree index.Tree
+	Tree commonfs.Tree
 }
 
-func NewZipFS(tree index.Tree) billy.Filesystem {
+func NewZipFS(tree commonfs.Tree) billy.Filesystem {
 	return &ZipFS{Tree: tree}
 }
 

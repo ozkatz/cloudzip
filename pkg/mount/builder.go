@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
+	"github.com/ozkatz/cloudzip/pkg/mount/commonfs"
 	"github.com/ozkatz/cloudzip/pkg/mount/procfs"
 	"github.com/ozkatz/cloudzip/pkg/remote"
 	"github.com/ozkatz/cloudzip/pkg/zipfile"
@@ -29,8 +29,8 @@ func asKey(strs ...string) string {
 	return hex.EncodeToString(out)
 }
 
-func getOpenerFor(logger *slog.Logger, zipPath string, record *zipfile.CDR, cache *index.FileCache) index.OpenFn {
-	return func(fullPath string, flag int, perm os.FileMode) (index.FileLike, error) {
+func getOpenerFor(logger *slog.Logger, zipPath string, record *zipfile.CDR, cache *commonfs.FileCache) commonfs.OpenFn {
+	return func(fullPath string, flag int, perm os.FileMode) (commonfs.FileLike, error) {
 		filename := path.Clean(record.FileName)
 		key := asKey(zipPath, filename, strconv.Itoa(int(record.CRC32Uncompressed)))
 		f, err := cache.Get(key)
@@ -56,7 +56,7 @@ func getOpenerFor(logger *slog.Logger, zipPath string, record *zipfile.CDR, cach
 	}
 }
 
-func BuildZipTree(ctx context.Context, logger *slog.Logger, cacheDir, remoteZipURI string, procAttrs map[string]interface{}) (index.Tree, error) {
+func BuildZipTree(ctx context.Context, logger *slog.Logger, cacheDir, remoteZipURI string, procAttrs map[string]interface{}) (commonfs.Tree, error) {
 	obj, err := remote.Object(remoteZipURI, remote.WithLogger(logger))
 	if err != nil {
 		return nil, err
@@ -70,10 +70,10 @@ func BuildZipTree(ctx context.Context, logger *slog.Logger, cacheDir, remoteZipU
 	startTime := time.Now()
 
 	// build index
-	infos := make(index.FileInfoList, 0)
-	cache := index.NewFileCache(cacheDir)
+	infos := make(commonfs.FileInfoList, 0)
+	cache := commonfs.NewFileCache(cacheDir)
 	for _, f := range cdr {
-		infos = append(infos, index.ImmutableInfo(
+		infos = append(infos, commonfs.ImmutableInfo(
 			f.FileName,
 			f.Modified,
 			f.Mode,
@@ -93,8 +93,8 @@ func BuildZipTree(ctx context.Context, logger *slog.Logger, cacheDir, remoteZipU
 	}
 	// sort it
 	sort.Sort(infos)
-	tree := index.NewInMemoryTreeBuilder(func(entry string) *index.FileInfo {
-		return index.ImmutableDir(entry, startTime)
+	tree := commonfs.NewInMemoryTreeBuilder(func(entry string) *commonfs.FileInfo {
+		return commonfs.ImmutableDir(entry, startTime)
 	})
 	err = tree.Index(infos)
 	if err != nil {

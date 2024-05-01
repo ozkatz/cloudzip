@@ -4,11 +4,11 @@ import (
 	"github.com/go-git/go-billy/v5"
 	"github.com/willscott/go-nfs/file"
 
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
+	"github.com/ozkatz/cloudzip/pkg/mount/commonfs"
 )
 
 type nfsFileInfo struct {
-	*index.FileInfo
+	*commonfs.FileInfo
 }
 
 func (f *nfsFileInfo) Sys() any {
@@ -21,7 +21,7 @@ func (f *nfsFileInfo) Sys() any {
 }
 
 type nfsFile struct {
-	index.FileLike
+	commonfs.FileLike
 	name string
 }
 
@@ -41,6 +41,6 @@ func (n *nfsFile) Truncate(size int64) error {
 	return billy.ErrNotSupported
 }
 
-func fileLikeToBilly(f index.FileLike, filename string) billy.File {
+func fileLikeToBilly(f commonfs.FileLike, filename string) billy.File {
 	return &nfsFile{f, filename}
 }
