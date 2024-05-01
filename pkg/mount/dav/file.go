@@ -1,9 +1,11 @@
 package dav
 
 import (
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
-	"golang.org/x/net/webdav"
 	"io/fs"
+
+	"golang.org/x/net/webdav"
+
+	"github.com/ozkatz/cloudzip/pkg/mount/index"
 )
 
 var _ webdav.File = &treeFile{}

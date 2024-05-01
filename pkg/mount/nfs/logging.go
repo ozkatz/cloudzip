@@ -2,10 +2,11 @@ package nfs
 
 import (
 	"context"
-	"github.com/go-git/go-billy/v5"
 	"log/slog"
 	"os"
 	"time"
+
+	"github.com/go-git/go-billy/v5"
 )
 
 type loggingFs struct {
