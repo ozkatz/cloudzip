@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/ozkatz/cloudzip/pkg/mount/dav"
 	"io"
 	"log/slog"
 	"net"
@@ -14,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ozkatz/cloudzip/pkg/mount"
+	"github.com/ozkatz/cloudzip/pkg/mount/dav"
 	"github.com/ozkatz/cloudzip/pkg/mount/nfs"
 )
 

@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"github.com/ozkatz/cloudzip/pkg/mount/procfs"
 	"github.com/ozkatz/cloudzip/pkg/remote"
@@ -30,8 +29,8 @@ func asKey(strs ...string) string {
 	return hex.EncodeToString(out)
 }
 
-func getOpenerFor(logger *slog.Logger, zipPath string, record *zipfile.CDR, cache *fs.FileCache) fs.OpenFn {
-	return func(fullPath string, flag int, perm os.FileMode) (fs.FileLike, error) {
+func getOpenerFor(logger *slog.Logger, zipPath string, record *zipfile.CDR, cache *index.FileCache) index.OpenFn {
+	return func(fullPath string, flag int, perm os.FileMode) (index.FileLike, error) {
 		filename := path.Clean(record.FileName)
 		key := asKey(zipPath, filename, strconv.Itoa(int(record.CRC32Uncompressed)))
 		f, err := cache.Get(key)
@@ -71,10 +70,10 @@ func BuildZipTree(ctx context.Context, logger *slog.Logger, cacheDir, remoteZipU
 	startTime := time.Now()
 
 	// build index
-	infos := make(fs.FileInfoList, 0)
-	cache := fs.NewFileCache(cacheDir)
+	infos := make(index.FileInfoList, 0)
+	cache := index.NewFileCache(cacheDir)
 	for _, f := range cdr {
-		infos = append(infos, fs.ImmutableInfo(
+		infos = append(infos, index.ImmutableInfo(
 			f.FileName,
 			f.Modified,
 			f.Mode,
@@ -94,8 +93,8 @@ func BuildZipTree(ctx context.Context, logger *slog.Logger, cacheDir, remoteZipU
 	}
 	// sort it
 	sort.Sort(infos)
-	tree := index.NewInMemoryTreeBuilder(func(entry string) *fs.FileInfo {
-		return fs.ImmutableDir(entry, startTime)
+	tree := index.NewInMemoryTreeBuilder(func(entry string) *index.FileInfo {
+		return index.ImmutableDir(entry, startTime)
 	})
 	err = tree.Index(infos)
 	if err != nil {

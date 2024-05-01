@@ -2,13 +2,12 @@ package nfs
 
 import (
 	"github.com/go-git/go-billy/v5"
+	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"github.com/willscott/go-nfs/file"
-
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 )
 
 type nfsFileInfo struct {
-	*fs.FileInfo
+	*index.FileInfo
 }
 
 func (f *nfsFileInfo) Sys() any {
@@ -21,7 +20,7 @@ func (f *nfsFileInfo) Sys() any {
 }
 
 type nfsFile struct {
-	fs.FileLike
+	index.FileLike
 	name string
 }
 
@@ -41,6 +40,6 @@ func (n *nfsFile) Truncate(size int64) error {
 	return billy.ErrNotSupported
 }
 
-func fileLikeToBilly(f fs.FileLike, filename string) billy.File {
+func fileLikeToBilly(f index.FileLike, filename string) billy.File {
 	return &nfsFile{f, filename}
 }

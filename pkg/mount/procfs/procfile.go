@@ -2,10 +2,9 @@ package procfs
 
 import (
 	"bytes"
+	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"os"
 	"time"
-
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 )
 
 const (
@@ -44,10 +43,10 @@ func (f *InMemFile) Size() int64 {
 	return f.reader.Size()
 }
 
-func NewProcFile(path string, content []byte, modTime time.Time) *fs.FileInfo {
+func NewProcFile(path string, content []byte, modTime time.Time) *index.FileInfo {
 	f := &InMemFile{bytes.NewReader(content)}
-	opener := func(fullPath string, flag int, perm os.FileMode) (fs.FileLike, error) {
+	opener := func(fullPath string, flag int, perm os.FileMode) (index.FileLike, error) {
 		return f, nil
 	}
-	return fs.ImmutableInfo(path, modTime, ProcFileMode, f.Size(), fs.OpenFn(opener))
+	return index.ImmutableInfo(path, modTime, ProcFileMode, f.Size(), index.OpenFn(opener))
 }

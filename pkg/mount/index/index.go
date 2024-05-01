@@ -7,8 +7,6 @@ import (
 	"path"
 	"strings"
 	"sync"
-
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
 )
 
 var (
@@ -19,21 +17,21 @@ type Tree interface {
 	// Index accepts a sorted list of paths.
 	// it creates a mapping of directory memberships and makes up for missing directory entries, if any.
 	// (some indices have no directory entries at all, so those need to be created)
-	Index(infos []*fs.FileInfo) error
+	Index(infos []*FileInfo) error
 
 	// Readdir returns the direct descendants of the given directory at entryPath
-	Readdir(entryPath string) (fs.FileInfoList, error)
+	Readdir(entryPath string) (FileInfoList, error)
 
 	// Stat returns in the FileInfo for the given file/directory at entryPath
-	Stat(entryPath string) (*fs.FileInfo, error)
+	Stat(entryPath string) (*FileInfo, error)
 }
 
-type DirInfoGenerator func(filename string) *fs.FileInfo
+type DirInfoGenerator func(filename string) *FileInfo
 
 // InMemoryTreeBuilder maintains a tree in memory
 type InMemoryTreeBuilder struct {
-	files       map[string]*fs.FileInfo
-	dirs        map[string][]*fs.FileInfo
+	files       map[string]*FileInfo
+	dirs        map[string][]*FileInfo
 	directoryFn DirInfoGenerator
 	l           *sync.Mutex
 }
@@ -42,14 +40,14 @@ var _ Tree = &InMemoryTreeBuilder{}
 
 func NewInMemoryTreeBuilder(directoryFn DirInfoGenerator) *InMemoryTreeBuilder {
 	return &InMemoryTreeBuilder{
-		files:       make(map[string]*fs.FileInfo),
-		dirs:        make(map[string][]*fs.FileInfo),
+		files:       make(map[string]*FileInfo),
+		dirs:        make(map[string][]*FileInfo),
 		directoryFn: directoryFn,
 		l:           &sync.Mutex{},
 	}
 }
 
-func (t *InMemoryTreeBuilder) Index(infos []*fs.FileInfo) error {
+func (t *InMemoryTreeBuilder) Index(infos []*FileInfo) error {
 	t.l.Lock()
 	defer t.l.Unlock()
 
@@ -61,7 +59,7 @@ func (t *InMemoryTreeBuilder) Index(infos []*fs.FileInfo) error {
 			// current file, not its parents
 			isLastEntry := i == len(parts)-1
 			// determine file info for part
-			var currentInfo *fs.FileInfo
+			var currentInfo *FileInfo
 			if !isLastEntry {
 				currentInfo = t.directoryFn(part)
 			} else {
@@ -98,7 +96,7 @@ var (
 	ErrIntegrityError = errors.New("integrity error")
 )
 
-func fsck(currentPath string, files map[string]*fs.FileInfo, dirs map[string][]*fs.FileInfo) error {
+func fsck(currentPath string, files map[string]*FileInfo, dirs map[string][]*FileInfo) error {
 	file, hasFile := files[currentPath]
 	if !hasFile {
 		return fmt.Errorf("%w: could not find file entry for '%s'", ErrIntegrityError, currentPath)
@@ -116,7 +114,7 @@ func fsck(currentPath string, files map[string]*fs.FileInfo, dirs map[string][]*
 			return fmt.Errorf("%w: could not locate parent dir '%s' for '%s'",
 				ErrIntegrityError, parentDir, currentPath)
 		}
-		var entryInParentDir *fs.FileInfo
+		var entryInParentDir *FileInfo
 		for _, child := range parentData {
 			if child.Name() == file.Name() {
 				entryInParentDir = child
@@ -154,39 +152,39 @@ func fsck(currentPath string, files map[string]*fs.FileInfo, dirs map[string][]*
 }
 
 func DirParts(p string) []string {
-	p = strings.Trim(p, fs.Delimiter)
+	p = strings.Trim(p, Delimiter)
 	if p == "" || p == "." {
 		return []string{""}
 	}
 	parts := []string{""}
 	accum := ""
-	for _, part := range strings.Split(p, fs.Delimiter) {
+	for _, part := range strings.Split(p, Delimiter) {
 		parts = append(parts, accum+part)
-		accum = accum + part + fs.Delimiter
+		accum = accum + part + Delimiter
 	}
 	return parts
 }
 
-func (t *InMemoryTreeBuilder) Readdir(entryPath string) (fs.FileInfoList, error) {
+func (t *InMemoryTreeBuilder) Readdir(entryPath string) (FileInfoList, error) {
 	t.l.Lock()
 	defer t.l.Unlock()
-	entryPath = strings.Trim(entryPath, fs.Delimiter)
+	entryPath = strings.Trim(entryPath, Delimiter)
 	entries, dirExists := t.dirs[entryPath]
 	if !dirExists {
 		return nil, os.ErrNotExist
 	}
 	// ReadDir returns paths relative to the read directory, not absolute paths
-	relativeNamedEntries := make(fs.FileInfoList, len(entries))
+	relativeNamedEntries := make(FileInfoList, len(entries))
 	for i, entry := range entries {
 		relativeNamedEntries[i] = entry.AsPath(path.Base(entry.FullPath()))
 	}
 	return relativeNamedEntries, nil
 }
 
-func (t *InMemoryTreeBuilder) Stat(entryPath string) (*fs.FileInfo, error) {
+func (t *InMemoryTreeBuilder) Stat(entryPath string) (*FileInfo, error) {
 	t.l.Lock()
 	defer t.l.Unlock()
-	entryPath = strings.Trim(entryPath, fs.Delimiter)
+	entryPath = strings.Trim(entryPath, Delimiter)
 	stat, ok := t.files[entryPath]
 	if !ok {
 		return nil, os.ErrNotExist

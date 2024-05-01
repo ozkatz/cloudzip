@@ -1,7 +1,6 @@
 package dav
 
 import (
-	mntfs "github.com/ozkatz/cloudzip/pkg/mount/fs"
 	"github.com/ozkatz/cloudzip/pkg/mount/index"
 	"golang.org/x/net/webdav"
 	"io/fs"
@@ -11,9 +10,9 @@ var _ webdav.File = &treeFile{}
 
 type treeFile struct {
 	tree index.Tree
-	fi   *mntfs.FileInfo
+	fi   *index.FileInfo
 
-	handle  mntfs.FileLike
+	handle  index.FileLike
 	voffset int64
 }
 
