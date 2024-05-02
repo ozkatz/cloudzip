@@ -1,0 +1,16 @@
+---
+name: '☑️ Install deps'
+description: 'Install dependencies and setup node'
+
+runs:
+    using: composite
+    steps:
+        - name: 🖥️ Setup Node
+          uses: actions/setup-node@v4
+          with:
+              node-version: 20
+
+        - name: 🔗 Install Dependencies
+          shell: bash
+          run: |
+              npm ci --no-fund --no-audit --no-progress --ignore-scripts

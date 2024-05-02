@@ -1,0 +1,25 @@
+{
+    "name": "cloudzip",
+    "version": "0.0.1",
+    "description": "list and get specific files from remote zip archives without downloading the whole thing",
+    "license": "Apache-2.0",
+    "keywords": [
+        "zip",
+        "cloud",
+        "remote"
+    ],
+    "scripts": {
+        "prepare": "husky || exit 0"
+    },
+    "devDependencies": {
+        "@commitlint/cli": "^19.2.2",
+        "@commitlint/config-conventional": "^19.2.2",
+        "@semantic-release/changelog": "^6.0.3",
+        "@semantic-release/commit-analyzer": "^12.0.0",
+        "@semantic-release/git": "^10.0.1",
+        "@semantic-release/github": "^10.0.3",
+        "@semantic-release/release-notes-generator": "^13.0.0",
+        "husky": "^9.0.11",
+        "semantic-release": "^23.0.8"
+    }
+}
