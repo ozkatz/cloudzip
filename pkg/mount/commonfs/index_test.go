@@ -1,4 +1,4 @@
-package index_test
+package commonfs_test
 
 import (
 	"os"
@@ -6,8 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
+	"github.com/ozkatz/cloudzip/pkg/mount/commonfs"
 )
 
 func TestInMemoryTreeBuilder_Readdir(t *testing.T) {
@@ -21,12 +20,12 @@ func TestInMemoryTreeBuilder_Readdir(t *testing.T) {
 		"hello/zzz.info",
 	}
 
-	idx := index.NewInMemoryTreeBuilder(func(filename string) *fs.FileInfo {
-		return fs.ImmutableDir(filename, time.Now())
+	idx := commonfs.NewInMemoryTreeBuilder(func(filename string) *commonfs.FileInfo {
+		return commonfs.ImmutableDir(filename, time.Now())
 	})
-	infos := make(fs.FileInfoList, len(treeData))
+	infos := make(commonfs.FileInfoList, len(treeData))
 	for i, p := range treeData {
-		infos[i] = fs.ImmutableInfo(p, time.Now(), os.ModePerm, 100, nil)
+		infos[i] = commonfs.ImmutableInfo(p, time.Now(), os.ModePerm, 100, nil)
 	}
 	sort.Sort(infos)
 	err := idx.Index(infos)

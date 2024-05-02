@@ -2,18 +2,20 @@ package dav
 
 import (
 	"context"
-	"github.com/ozkatz/cloudzip/pkg/mount/index"
-	"golang.org/x/net/webdav"
 	"os"
+
+	"golang.org/x/net/webdav"
+
+	"github.com/ozkatz/cloudzip/pkg/mount/commonfs"
 )
 
 var _ webdav.FileSystem = &davFS{}
 
 type davFS struct {
-	tree index.Tree
+	tree commonfs.Tree
 }
 
-func NewDavFS(tree index.Tree) webdav.FileSystem {
+func NewDavFS(tree commonfs.Tree) webdav.FileSystem {
 	return &davFS{tree}
 }
 

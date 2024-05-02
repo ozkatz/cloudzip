@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/ozkatz/cloudzip/pkg/mount/fs"
+	"github.com/ozkatz/cloudzip/pkg/mount/commonfs"
 )
 
 const (
@@ -44,10 +44,10 @@ func (f *InMemFile) Size() int64 {
 	return f.reader.Size()
 }
 
-func NewProcFile(path string, content []byte, modTime time.Time) *fs.FileInfo {
+func NewProcFile(path string, content []byte, modTime time.Time) *commonfs.FileInfo {
 	f := &InMemFile{bytes.NewReader(content)}
-	opener := func(fullPath string, flag int, perm os.FileMode) (fs.FileLike, error) {
+	opener := func(fullPath string, flag int, perm os.FileMode) (commonfs.FileLike, error) {
 		return f, nil
 	}
-	return fs.ImmutableInfo(path, modTime, ProcFileMode, f.Size(), fs.OpenFn(opener))
+	return commonfs.ImmutableInfo(path, modTime, ProcFileMode, f.Size(), commonfs.OpenFn(opener))
 }
