@@ -99,7 +99,7 @@ zip -r - -0 * | aws s3 cp - "s3://example-bucket/path/to/archive.zip"
 
 Zip files don't have to be compressed! `zip -0` will result in an uncompressed archive, so there's no additional overhead.
 
-## How Does it Work?
+## How Does Cloudzip Work?
 
 #### `cz ls` 
 
